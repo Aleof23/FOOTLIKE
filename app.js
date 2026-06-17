@@ -102,6 +102,8 @@ const DOM = {
     retirementScreen: document.getElementById('retirement-screen'),
     retirementSummary: document.getElementById('retirement-summary'),
     btnBackToMain: document.getElementById('btn-back-to-main'),
+
+    // Botones para el menú móvil
     btnToggleStats: document.getElementById('btn-toggle-stats'),
     btnToggleLog: document.getElementById('btn-toggle-log')
 };
@@ -166,22 +168,59 @@ function init() {
     DOM.btnBackToMain.addEventListener('click', () => location.reload());
     DOM.btnToggleSim.addEventListener('click', toggleSimMode);
 
-    window.addEventListener('resize', drawLines);
-    if (localStorage.getItem(SAVE_KEY)) DOM.btnContinue.classList.remove('hidden');
-
-    // Eventos para el menú móvil
+    // --- ARREGLO MENÚ MÓVIL ---
     if (DOM.btnToggleStats) {
         DOM.btnToggleStats.addEventListener('click', () => {
-            document.querySelector('.left-panel').classList.toggle('mobile-visible');
+            document.querySelector('.left-panel').classList.add('mobile-visible');
             document.querySelector('.right-panel').classList.remove('mobile-visible');
         });
     }
     if (DOM.btnToggleLog) {
         DOM.btnToggleLog.addEventListener('click', () => {
-            document.querySelector('.right-panel').classList.toggle('mobile-visible');
+            document.querySelector('.right-panel').classList.add('mobile-visible');
             document.querySelector('.left-panel').classList.remove('mobile-visible');
         });
     }
+
+    // Inyección de botones de "Cerrar" solo para el móvil
+    const leftPanel = document.querySelector('.left-panel');
+    const rightPanel = document.querySelector('.right-panel');
+    
+    if(leftPanel && !document.getElementById('close-left')) {
+        let btnCloseL = document.createElement('button');
+        btnCloseL.id = 'close-left';
+        btnCloseL.className = 'close-mobile-btn';
+        btnCloseL.innerHTML = '❌ Cerrar Panel';
+        btnCloseL.onclick = () => leftPanel.classList.remove('mobile-visible');
+        leftPanel.insertBefore(btnCloseL, leftPanel.firstChild);
+    }
+    
+    if(rightPanel && !document.getElementById('close-right')) {
+        let btnCloseR = document.createElement('button');
+        btnCloseR.id = 'close-right';
+        btnCloseR.className = 'close-mobile-btn';
+        btnCloseR.innerHTML = '❌ Cerrar Panel';
+        btnCloseR.onclick = () => rightPanel.classList.remove('mobile-visible');
+        rightPanel.insertBefore(btnCloseR, rightPanel.firstChild);
+    }
+
+    // --- LÓGICA DEL MODO CLARO/OSCURO ---
+    const btnTheme = document.getElementById('btn-theme-toggle');
+    if (btnTheme) {
+        btnTheme.addEventListener('click', () => {
+            document.body.classList.toggle('light-theme');
+            // Guardamos tu preferencia para la próxima vez
+            localStorage.setItem('futlike_theme', document.body.classList.contains('light-theme') ? 'light' : 'dark');
+        });
+    }
+    
+    // Al entrar al juego, mira si lo habías dejado en modo claro
+    if (localStorage.getItem('futlike_theme') === 'light') {
+        document.body.classList.add('light-theme');
+    }
+
+    window.addEventListener('resize', drawLines);
+    if (localStorage.getItem(SAVE_KEY)) DOM.btnContinue.classList.remove('hidden');
 }
 
 function startNewCareer() {
@@ -281,22 +320,46 @@ function calculateCareerScore() {
     return Math.max(1, Math.min(10, finalScore)).toFixed(2);
 }
 
+// --- FUNCIONES DEL SALÓN DE LA FAMA ---
 function showPastCareers() {
     DOM.startMenu.classList.add('hidden');
     DOM.pastCareersScreen.classList.remove('hidden');
+    renderPastCareers();
+}
+
+function renderPastCareers() {
     let history = JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
     DOM.pastCareersList.innerHTML = '';
-    if (history.length === 0) { DOM.pastCareersList.innerHTML = '<p style="color:var(--text-muted);">Aún no hay leyendas registradas.</p>'; return; }
+    
+    if (history.length === 0) { 
+        DOM.pastCareersList.innerHTML = '<p style="color:var(--text-muted);">Aún no hay leyendas registradas.</p>'; 
+        return; 
+    }
 
-    history.forEach(c => {
-        let div = document.createElement('div'); div.className = 'history-card';
+    history.forEach((c, index) => {
+        let div = document.createElement('div'); 
+        div.className = 'history-card';
         div.innerHTML = `
-            <div><h4 style="color:var(--text-light); margin-bottom:5px;">${c.name} (${c.position})</h4>
-            <p style="font-size:0.85rem; color:var(--text-muted);">Goles: ${c.goals} | Asistencias: ${c.assists} <br>🏆 Títulos: ${c.titles} | 🌕 Balones: ${c.ballons}</p></div>
-            <div class="history-card-score">${c.score}</div>
+            <div style="flex:1;">
+                <h4 style="color:var(--text-light); margin-bottom:5px;">${c.name} (${c.position})</h4>
+                <p style="font-size:0.85rem; color:var(--text-muted);">Goles: ${c.goals} | Asistencias: ${c.assists} <br>🏆 Títulos: ${c.titles} | 🌕 Balones: ${c.ballons}</p>
+            </div>
+            <div style="display:flex; align-items:center; gap: 15px;">
+                <div class="history-card-score">${c.score}</div>
+                <button class="delete-history-btn" onclick="deletePastCareer(${index})" title="Borrar leyenda">❌</button>
+            </div>
         `;
         DOM.pastCareersList.appendChild(div);
     });
+}
+
+function deletePastCareer(index) {
+    if (confirm("¿Estás seguro de que quieres borrar esta leyenda del Salón de la Fama? Esta acción no se puede deshacer.")) {
+        let history = JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
+        history.splice(index, 1);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        renderPastCareers(); 
+    }
 }
 
 function confirmRetirement() {
@@ -387,7 +450,11 @@ function showModalResult(title, dynamicHtml, descHtml, continueCallback) {
 }
 
 function getInjuryMultiplier() {
-    if (gameState.age >= 40) return 3; if (gameState.age >= 34) return 2; return 1;
+    if (gameState.age >= 40) return 3;      
+    if (gameState.age >= 34) return 2;      
+    if (gameState.age >= 31) return 1.5;    
+    if (gameState.age >= 28) return 1.25;   
+    return 1;                               
 }
 
 function silentlySimulateRemainingFinals() {
@@ -420,12 +487,11 @@ function silentlySimulateRemainingFinals() {
 }
 
 function applyInjury(sourceContext) {
-    // DISTRIBUCIÓN POR GRAVEDAD
     const injuries = [
-        { name: "Rotura de Ligamento Cruzado", skip: 99, penalty: 8, weight: 5 }, // 5%
-        { name: "Esguince Grave", skip: 3, penalty: 5, weight: 20 },            // 20%
-        { name: "Lesión en el Gemelo", skip: 2, penalty: 3, weight: 35 },         // 35%
-        { name: "Molestias en el Cuádriceps", skip: 1, penalty: 2, weight: 40 }   // 40%
+        { name: "Rotura de Ligamento Cruzado", skip: 99, penalty: 8, weight: 5 },
+        { name: "Esguince Grave", skip: 3, penalty: 5, weight: 20 },            
+        { name: "Lesión en el Gemelo", skip: 2, penalty: 3, weight: 35 },         
+        { name: "Molestias en el Cuádriceps", skip: 1, penalty: 2, weight: 40 }   
     ];
     
     let roll = Math.random() * 100;
@@ -455,7 +521,8 @@ function applyInjury(sourceContext) {
     showModalResult("¡LESIÓN GRAVE!", dynamicHtml, descHtml, () => {
         let newTier = gameState.currentTier + injury.skip + 1;
         
-        if (injury.skip === 99 || newTier > 5) silentlySimulateRemainingFinals();
+        // ACTUALIZADO: Si la lesión salta el Tier 7, simular finales en secreto
+        if (injury.skip === 99 || newTier > 7) silentlySimulateRemainingFinals();
         
         if (injury.skip === 99) {
             DOM.modalOverlay.classList.add('hidden');
@@ -488,14 +555,13 @@ function openActionPanel(node) {
     if (node.type === 'transfer') {
         let marketVal = getMarketValue();
         
-        // NÚMERO DE OFERTAS ALEATORIO
         let offerCountRoll = Math.random() * 100;
         let numOffers = 0;
-        if (offerCountRoll < 5) numOffers = 0;       // 5% cero ofertas
-        else if (offerCountRoll < 30) numOffers = 1; // 25% una oferta
-        else if (offerCountRoll < 70) numOffers = 2; // 40% dos ofertas
-        else if (offerCountRoll < 95) numOffers = 3; // 25% tres ofertas
-        else numOffers = randomInt(4, 5);            // 5% cuatro o cinco ofertas
+        if (offerCountRoll < 5) numOffers = 0;       
+        else if (offerCountRoll < 30) numOffers = 1; 
+        else if (offerCountRoll < 70) numOffers = 2; 
+        else if (offerCountRoll < 95) numOffers = 3; 
+        else numOffers = randomInt(4, 5);            
         
         let offers = [];
         for(let i=0; i<numOffers; i++) {
@@ -509,11 +575,10 @@ function openActionPanel(node) {
 
         let offerData = offers.map(o => { return { ...o, fee: marketVal * ((Math.random() * 0.4) + 0.8) }; });
 
-        // DESPIDOS
         let isFired = false;
         let firedMsg = "";
         if (gameState.team !== "Agente Libre") {
-            if (Math.random() < 0.15) { // 15% de probabilidad de ser despedido
+            if (Math.random() < 0.15) { 
                 isFired = true;
                 firedMsg = `<br><br><span style="color:var(--danger-red);"><strong>¡ATENCIÓN!</strong> El ${gameState.team} ha decidido no renovar tu contrato. Te han enseñado la puerta de salida.</span>`;
             }
@@ -533,7 +598,6 @@ function openActionPanel(node) {
             }
         } 
         
-        // Oferta a la desesperada si te quedas en la calle y no hay ofertas
         if (offerData.length === 0 && (gameState.team === "Agente Libre" || isFired)) {
             let fallback = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB[Math.floor(Math.random() * TEAMS_DB.length)] : { id: 'default', name: 'FC Equipo Local', league: 'Liga', fee: marketVal };
             fallback.fee = marketVal * ((Math.random() * 0.4) + 0.8);
@@ -566,6 +630,38 @@ function openActionPanel(node) {
     }
 }
 
+function recalculateFinals() {
+    gameState.finalsReached = [];
+    gameState.currentFinalIndex = 0;
+
+    let myTeamInfo = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.find(t => t.name === gameState.team) : null;
+    let myTier = getEffectiveTier(gameState.team);
+
+    let pCup = 0, pLeague = 0, pEurope = 0;
+    if (myTier === 4) { pCup = 10; pLeague = 1; }
+    else if (myTier === 3) { pCup = 20; pLeague = 5; }
+    else if (myTier === 2) { pCup = 35; pLeague = 10; pEurope = 35; }
+    else if (myTier === 1) { pCup = 40; pLeague = 70; pEurope = 40; }
+
+    let myEuro = myTeamInfo ? myTeamInfo.europeanCompetition : null;
+    if (myTier <= 2 && !myEuro) myEuro = myTier === 1 ? "Champions League" : "Europa League";
+
+    if (Math.random() * 100 < pLeague) gameState.finalsReached.push("Liga");
+    if (Math.random() * 100 < pCup) gameState.finalsReached.push("Copa");
+    if (myEuro && (Math.random() * 100 < pEurope)) gameState.finalsReached.push(myEuro);
+
+    let hasFinals = gameState.finalsReached.length > 0;
+
+    // ACTUALIZADO: Ahora las finales están en el Tier 7
+    if (gameState.seasonTree && gameState.seasonTree[7]) {
+        gameState.seasonTree[7].forEach(node => {
+            if (gameState.currentTier < 7) {
+                node.type = hasFinals ? 'final_match' : getRandomEventType();
+            }
+        });
+    }
+}
+
 function acceptOffer(teamObj) {
     gameState.team = teamObj.name;
     gameState.league = teamObj.league;
@@ -578,7 +674,6 @@ function acceptOffer(teamObj) {
 
     addLog(`Fichas por el ${teamObj.name} (${formatMoney(teamObj.fee)}).`, "system");
     
-    // AQUÍ ESTÁ LA MAGIA: Recalculamos las probabilidades con el nuevo club
     recalculateFinals();
 
     let logoHtml = `<img src="${IMAGE_FOLDER}/${teamObj.id}${IMAGE_EXT}" alt="${teamObj.name}" style="height:100px; object-fit:contain;" onerror="this.style.display='none'">`;
@@ -592,7 +687,7 @@ function stayAtClub() {
 
 function resolveTraining() {
     let mult = getInjuryMultiplier();
-    if (Math.random() < (0.04 * mult)) { applyInjury("entrenamiento"); return; } // Probabilidad rebajada al 4%
+    if (Math.random() < (0.04 * mult)) { applyInjury("entrenamiento"); return; } 
 
     let roll = Math.random();
     let gain = 0;
@@ -752,13 +847,20 @@ function resolveMatch(isFinal) {
 
     if (rivalInfo) { rivalName = rivalInfo.name; rivalTier = getEffectiveTier(rivalName); rivalId = rivalInfo.id; }
 
+    let myTeamGoalsBase = g + Math.floor(Math.random() * 2); 
+    let rivalGoalsBase = Math.floor(Math.random() * 2);
+    let tierDiff = rivalTier - myTier; 
+
+    if (tierDiff > 0) myTeamGoalsBase += Math.floor(Math.random() * (tierDiff + 1));
+    else if (tierDiff < 0) rivalGoalsBase += Math.floor(Math.random() * (Math.abs(tierDiff) * 2));
+
     let myTeamGoals = Math.max(g, myTeamGoalsBase); 
     let rivalGoals = Math.max(0, rivalGoalsBase);
     let matchResult = "draw"; 
     
     if (myTeamGoals > rivalGoals) matchResult = "win"; 
     else if (myTeamGoals < rivalGoals) matchResult = "loss";
-    
+
     let desc = `Has marcado ${g} gol(es) y dado ${a} asistencia(s).`;
 
     if (isFinal) {
@@ -775,7 +877,7 @@ function resolveMatch(isFinal) {
             desc += ` El ${rivalName} fue superior. Perdisteis la final.`;
             addLog(`Derrota dolorosa en la final de ${currentFinalName}.`);
         } else {
-            // EMPATE EN LOS 90 MINUTOS - TANDA DE PENALTIS (50/50 REAL)
+            // EMPATE EN LOS 90 MINUTOS - TANDA DE PENALTIS (50/50 REAL SIN GOL FANTASMA)
             if (Math.random() < 0.5) {
                 matchResult = "win";
                 desc += " ¡Victoria épica en los penaltis!";
@@ -787,12 +889,12 @@ function resolveMatch(isFinal) {
                 addLog(`¡LEVANTAS EL TÍTULO DE ${currentFinalName.toUpperCase()} EN PENALTIS!`, "system");
             } else {
                 matchResult = "loss";
-                // YA NO sumamos un gol falso al rival. El marcador se queda en empate.
                 desc += ` Derrota en la tanda de penaltis contra el ${rivalName}. El fútbol ha sido cruel hoy.`;
                 addLog(`Derrota dolorosa en los penaltis de ${currentFinalName}.`);
             }
         }
     }
+
     let ratingChange = 0;
     
     if (gameState.rating >= 90) {
@@ -812,7 +914,7 @@ function resolveMatch(isFinal) {
     desc += `<br><br><strong style="color:var(--action-blue);">Repercusión en prensa: ${sign}${ratingChange} GRL</strong>`;
 
     let mult = getInjuryMultiplier();
-    let isInjured = Math.random() < (0.07 * mult); // Probabilidad de lesión rebajada al 7%
+    let isInjured = Math.random() < (0.07 * mult); 
     
     let nextAction;
     if (isFinal && gameState.currentFinalIndex < gameState.finalsReached.length - 1) {
@@ -905,10 +1007,8 @@ function resolveSeasonSummary() {
             }
         }
 
-        // Añadimos la condición obligatoria de tener al menos 1 título ganado
         if (getEffectiveTier(gameState.team) <= 2 && gameState.rating >= 85 && (gameState.goalsThisSeason + gameState.assistsThisSeason) >= 40 && gameState.titlesThisSeason > 0) {
-            // Calculamos la probabilidad (el bonus de +25 ya viene implícito porque siempre tendrás al menos 1 título)
-            let bChance = (gameState.rating - 80) * 2 + (gameState.goalsThisSeason) * 1.5 + 25;
+            let bChance = (gameState.rating - 80) * 2 + (gameState.goalsThisSeason) * 1.5 + 25; 
             if (Math.random() * 100 < bChance) {
                 gameState.ballonsDor = (gameState.ballonsDor || 0) + 1;
                 awardsMsg += "<br><br>🌕 <strong style='color:var(--gold-star)'>¡BALÓN DE ORO!</strong> El mundo se rinde a tus pies. Eres el mejor jugador del planeta.";
@@ -950,18 +1050,14 @@ function endSeason() {
     DOM.modalOverlay.classList.add('hidden');
     gameState.season++; gameState.age++;
     
-    // Retirada obligatoria sí o sí a los 45 (si lograste sobrevivir)
     if (gameState.age >= 45) {
         addLog("Has cumplido 45 años. Por reglamento médico y físico, te ves obligado a retirarte.", "system");
         setTimeout(() => { alert("¡Has cumplido 45 años! Tu cuerpo ya no aguanta el ritmo profesional. Es hora de colgar las botas y pasar a la historia."); retirePlayer(); }, 500);
         return;
     }
 
-    // NUEVO: Riesgo de retiro exponencial a partir de los 35 años
     if (gameState.age >= 35) {
-        // Fórmula exponencial que empieza en 20% a los 35 y sube a 90% a los 40
         let retirementChance = 0.20 * Math.exp(0.3008 * (gameState.age - 35));
-        
         if (Math.random() < retirementChance) {
             let percentLog = Math.min(99, Math.round(retirementChance * 100));
             addLog(`Tu cuerpo no aguanta más el ritmo (Riesgo: ${percentLog}%). Te retiras por problemas físicos.`, "injury");
@@ -970,8 +1066,7 @@ function endSeason() {
                 alert(`¡TU CUERPO HA DICHO BASTA!\n\nA tus ${gameState.age} años, el desgaste físico acumulado y los continuos problemas médicos te obligan a retirarte de forma prematura.\n\nEs hora de colgar las botas.`); 
                 retirePlayer(); 
             }, 500);
-            
-            return; // Corta la función para que no avance la temporada
+            return; 
         }
     }
 
@@ -997,6 +1092,7 @@ function endSeason() {
 
     generateDiamondTree(); saveState(); updateUI(); renderTree();
 }
+
 function getRandomEventType() {
     let r = Math.random() * 100;
     if (r < 40) return 'match';
@@ -1004,39 +1100,9 @@ function getRandomEventType() {
     if (r < 90) return 'rest';
     return 'random';
 }
-// --- NUEVO: REEVALUAR FINALES AL CAMBIAR DE EQUIPO ---
-function recalculateFinals() {
-    gameState.finalsReached = [];
-    gameState.currentFinalIndex = 0;
 
-    let myTeamInfo = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.find(t => t.name === gameState.team) : null;
-    let myTier = getEffectiveTier(gameState.team);
-
-    let pCup = 0, pLeague = 0, pEurope = 0;
-    if (myTier === 4) { pCup = 10; pLeague = 1; }
-    else if (myTier === 3) { pCup = 20; pLeague = 5; }
-    else if (myTier === 2) { pCup = 35; pLeague = 10; pEurope = 35; }
-    else if (myTier === 1) { pCup = 40; pLeague = 70; pEurope = 40; }
-
-    let myEuro = myTeamInfo ? myTeamInfo.europeanCompetition : null;
-    if (myTier <= 2 && !myEuro) myEuro = myTier === 1 ? "Champions League" : "Europa League";
-
-    if (Math.random() * 100 < pLeague) gameState.finalsReached.push("Liga");
-    if (Math.random() * 100 < pCup) gameState.finalsReached.push("Copa");
-    if (myEuro && (Math.random() * 100 < pEurope)) gameState.finalsReached.push(myEuro);
-
-    let hasFinals = gameState.finalsReached.length > 0;
-
-    // Modificamos el Tier 5 (la semana de las finales) en el árbol al vuelo
-    if (gameState.seasonTree && gameState.seasonTree[5]) {
-        gameState.seasonTree[5].forEach(node => {
-            // Solo cambiamos los nodos si aún no hemos llegado a esa semana
-            if (gameState.currentTier < 5) {
-                node.type = hasFinals ? 'final_match' : getRandomEventType();
-            }
-        });
-    }
-}
+// --- NUEVO: ÁRBOL ASIMÉTRICO ESTILO "POKÉMON PATH" ---
+// --- GENERACIÓN DE ÁRBOL DE 9 NIVELES (SILUETA ASIMÉTRICA: 1-2-3-4-3-4-3-2-1) ---
 function generateDiamondTree() {
     gameState.currentTier = 0; gameState.finalsReached = []; gameState.currentFinalIndex = 0;
     if (!gameState.visitedNodes) gameState.visitedNodes = [];
@@ -1055,15 +1121,60 @@ function generateDiamondTree() {
     if (myEuro && (Math.random() * 100 < pEurope)) gameState.finalsReached.push(myEuro);
 
     let hasFinals = gameState.finalsReached.length > 0;
-    let t1 = [getRandomEventType(), getRandomEventType()]; let t2 = [getRandomEventType(), getRandomEventType(), getRandomEventType()]; let t3 = [getRandomEventType(), 'transfer', getRandomEventType(), getRandomEventType()]; let t4 = [getRandomEventType(), getRandomEventType(), getRandomEventType()]; let t5 = hasFinals ? ['final_match', 'final_match'] : [getRandomEventType(), getRandomEventType()];
 
-    const layout = [ ['transfer'], t1, t2, t3, t4, t5, ['season_summary'] ];
+    // Configuración exacta solicitada para los 9 niveles de temporada
+    const layoutConfig = [
+        ['transfer'],                                                     // Tier 0 (1 nodo)
+        [getRandomEventType(), getRandomEventType()],                     // Tier 1 (2 nodos)
+        [getRandomEventType(), getRandomEventType(), getRandomEventType()], // Tier 2 (3 nodos)
+        [getRandomEventType(), getRandomEventType(), getRandomEventType(), getRandomEventType()], // Tier 3 (4 nodos)
+        [getRandomEventType(), 'transfer', getRandomEventType()],         // Tier 4 (3 nodos - Mercado de Invierno en el centro)
+        [getRandomEventType(), getRandomEventType(), getRandomEventType(), getRandomEventType()], // Tier 5 (4 nodos)
+        [getRandomEventType(), getRandomEventType(), getRandomEventType()], // Tier 6 (3 nodos)
+        hasFinals ? ['final_match', 'final_match'] : [getRandomEventType(), getRandomEventType()], // Tier 7 (2 nodos - Finales)
+        ['season_summary']                                                // Tier 8 (1 nodo - Fin de temporada)
+    ];
+
     let tree = [];
-    layout.forEach((row, rIndex) => { let tierNodes = []; row.forEach((type, cIndex) => { tierNodes.push({ id: `t${rIndex}_n${cIndex}`, tier: rIndex, type: type, children: getChildrenIds(rIndex, cIndex, layout) }); }); tree.push(tierNodes); });
+    layoutConfig.forEach((row, rIndex) => { 
+        let tierNodes = []; 
+        row.forEach((type, cIndex) => { 
+            let childrenIds = [];
+            
+            // Lógica matemática de interconexión de nodos según cambios de tamaño de fila
+            if (rIndex < layoutConfig.length - 1) {
+                let currLen = row.length;
+                let nextLen = layoutConfig[rIndex+1].length;
+                
+                if (currLen === 1 && nextLen === 2) {
+                    childrenIds = [`t${rIndex+1}_n0`, `t${rIndex+1}_n1`];
+                } else if (currLen === 2 && nextLen === 3) {
+                    if (cIndex === 0) childrenIds = [`t${rIndex+1}_n0`, `t${rIndex+1}_n1`];
+                    else childrenIds = [`t${rIndex+1}_n1`, `t${rIndex+1}_n2`];
+                } else if (currLen === 3 && nextLen === 4) {
+                    if (cIndex === 0) childrenIds = [`t${rIndex+1}_n0`, `t${rIndex+1}_n1`];
+                    else if (cIndex === 1) childrenIds = [`t${rIndex+1}_n1`, `t${rIndex+1}_n2`];
+                    else childrenIds = [`t${rIndex+1}_n2`, `t${rIndex+1}_n3`];
+                } else if (currLen === 4 && nextLen === 3) {
+                    if (cIndex === 0) childrenIds = [`t${rIndex+1}_n0`];
+                    else if (cIndex === 1) childrenIds = [`t${rIndex+1}_n0`, `t${rIndex+1}_n1`];
+                    else if (cIndex === 2) childrenIds = [`t${rIndex+1}_n1`, `t${rIndex+1}_n2`];
+                    else childrenIds = [`t${rIndex+1}_n2`];
+                } else if (currLen === 3 && nextLen === 2) {
+                    if (cIndex === 0) childrenIds = [`t${rIndex+1}_n0`];
+                    else if (cIndex === 1) childrenIds = [`t${rIndex+1}_n0`, `t${rIndex+1}_n1`];
+                    else childrenIds = [`t${rIndex+1}_n1`];
+                } else if (currLen === 2 && nextLen === 1) {
+                    childrenIds = [`t${rIndex+1}_n0`];
+                }
+            }
+            tierNodes.push({ id: `t${rIndex}_n${cIndex}`, tier: rIndex, type: type, children: childrenIds }); 
+        }); 
+        tree.push(tierNodes); 
+    });
     
     gameState.seasonTree = tree; gameState.currentNodeId = tree[0][0].id; 
 }
-
 function getChildrenIds(r, c, layout) {
     if (r >= layout.length - 1) return []; let children = []; let nextRowLen = layout[r+1].length; let currRowLen = layout[r].length;
     if (nextRowLen > currRowLen) { children.push(`t${r+1}_n${c}`); children.push(`t${r+1}_n${c+1}`); } else if (nextRowLen < currRowLen) { if (c > 0) children.push(`t${r+1}_n${c-1}`); if (c < nextRowLen) children.push(`t${r+1}_n${c}`); } else { children.push(`t${r+1}_n${c}`); }
@@ -1074,7 +1185,7 @@ function renderTree() {
     DOM.nodesWrapper.innerHTML = '';
     gameState.seasonTree.forEach((tier) => {
         const rowDiv = document.createElement('div'); rowDiv.className = 'tier-row';
-        tier.forEach(node => {
+        tier.forEach((node, index) => {
             const nodeEl = document.createElement('div'); nodeEl.className = 'event-node'; nodeEl.id = node.id; nodeEl.innerHTML = EVENT_ICONS[node.type];
             let titleText = 'Evento';
             if (node.type === 'transfer') titleText = 'Mercado'; else if (node.type === 'match') titleText = 'Partido'; else if (node.type === 'training') titleText = 'Entrenamiento'; else if (node.type === 'rest') titleText = 'Descanso'; else if (node.type === 'random') titleText = 'Sorpresa'; else if (node.type === 'season_summary') titleText = 'Resumen'; else if (node.type === 'final_match') titleText = 'Final';
@@ -1085,6 +1196,31 @@ function renderTree() {
                 const finalLabel = document.createElement('div'); finalLabel.textContent = "FINAL"; finalLabel.style.position = "absolute"; finalLabel.style.top = "-22px"; finalLabel.style.backgroundColor = "var(--danger-red)"; finalLabel.style.color = "white"; finalLabel.style.padding = "2px 8px"; finalLabel.style.borderRadius = "4px"; finalLabel.style.fontSize = "0.75rem"; finalLabel.style.fontWeight = "bold"; finalLabel.style.letterSpacing = "1px"; nodeEl.appendChild(finalLabel);
             }
             
+            // --- NUEVO: MATEMÁTICAS DE INCLINACIÓN (Coordenadas en 'rem') ---
+            let rowLen = tier.length;
+            let offsetX = 0;
+
+            
+            // Calculamos la coordenada X exacta basándonos en tus ángulos (45º, 30º, 20º)
+            if (rowLen === 1) {
+                offsetX = 0;
+            } else if (rowLen === 2) {
+                offsetX = index === 0 ? -6 : 6; 
+            } else if (rowLen === 3) {
+                if (index === 0) offsetX = -8.1;
+                else if (index === 1) offsetX = 0;
+                else offsetX = 8.1;
+            } else if (rowLen === 4) {
+                if (index === 0) offsetX = -10.2;
+                else if (index === 1) offsetX = -2.8;
+                else if (index === 2) offsetX = 2.8;
+                else offsetX = 10.2;
+            }
+
+            // Aplicamos la posición física exacta en el CSS
+            nodeEl.style.left = `calc(50% + ${offsetX}rem)`;
+            // ----------------------------------------------------------------
+
             if (gameState.visitedNodes && gameState.visitedNodes.includes(node.id)) { 
                 nodeEl.classList.add('completed'); 
             } else if (node.tier < gameState.currentTier) { 
