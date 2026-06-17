@@ -1,0 +1,658 @@
+/* --- VARIABLES GLOBALES --- */
+:root {
+    --bg-dark: #111827;
+    --panel-bg: #1f2937;
+    --text-light: #f9fafb;
+    --text-muted: #9ca3af;
+    --grass-green: #10b981;
+    --action-blue: #3b82f6;
+    --danger-red: #ef4444;
+    --border-color: #374151;
+    --gold-star: #fbbf24; 
+    --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* --- RESET Y ESTILOS BASE --- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-main);
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* --- PANTALLA DE INICIO Y FORMULARIO --- */
+.start-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--bg-dark);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+
+.start-menu, .new-career-form {
+    background-color: var(--panel-bg);
+    padding: 3rem;
+    border-radius: 12px;
+    border: 2px solid var(--border-color);
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    width: 100%;
+    max-width: 450px;
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.main-title {
+    font-size: 3.5rem;
+    color: var(--grass-green);
+    letter-spacing: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.subtitle {
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    margin-bottom: 2.5rem;
+}
+
+.start-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.action-btn {
+    background-color: var(--grass-green) !important;
+    color: #000 !important;
+    border-color: var(--grass-green) !important;
+    font-size: 1.1rem !important;
+}
+
+.action-btn:hover {
+    background-color: #059669 !important;
+    color: white !important;
+    transform: translateY(-2px);
+}
+
+/* Formulario */
+.new-career-form h2 {
+    color: var(--action-blue);
+    margin-bottom: 2rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    margin-bottom: 1.5rem;
+    gap: 0.5rem;
+}
+
+.form-group label {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+
+.form-group input, .form-group select {
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+    font-family: inherit;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+}
+
+.form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--grass-green);
+}
+
+.form-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* --- LAYOUT PRINCIPAL (3 COLUMNAS CON GRID) --- */
+.game-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 350px; 
+    height: 100vh;
+    width: 100vw;
+}
+
+/* --- COLUMNA 1: PANEL IZQUIERDO (Estadísticas) --- */
+.left-panel {
+    background-color: var(--panel-bg);
+    border-right: 2px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    padding: 2rem 1.5rem;
+    gap: 1.5rem;
+    overflow-y: auto;
+}
+
+.game-header h1 {
+    color: var(--grass-green);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 1.8rem;
+    text-align: center;
+}
+
+.stats-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.stat-group {
+    background-color: var(--bg-dark);
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.profile-header {
+    text-align: center;
+    border-color: var(--grass-green);
+    background: rgba(16, 185, 129, 0.05);
+    padding: 1.5rem 1rem;
+}
+
+.player-name {
+    color: var(--text-light);
+    font-size: 1.3rem;
+    margin-bottom: 0.5rem;
+    word-break: break-word;
+}
+
+.player-details {
+    color: var(--grass-green) !important;
+    font-size: 1rem !important;
+    margin-bottom: 0 !important;
+}
+
+.stat-group p {
+    margin-bottom: 0.8rem;
+    font-size: 0.95rem;
+}
+
+.stat-group p:last-child {
+    margin-bottom: 0;
+}
+
+.stat-group span {
+    font-weight: bold;
+    color: var(--grass-green);
+    font-size: 1.1rem;
+}
+
+/* --- BOTONES GLOBALES --- */
+button {
+    cursor: pointer;
+    border: none;
+    padding: 0.8rem 1rem;
+    border-radius: 6px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    font-family: var(--font-main);
+}
+
+.danger-btn {
+    background-color: var(--danger-red);
+    color: white;
+    width: 100%;
+    margin-top: auto;
+}
+
+.danger-btn:hover {
+    background-color: #dc2626;
+}
+
+/* Botón modo simulador */
+#btn-toggle-sim {
+    transition: background-color 0.2s, color 0.2s;
+    border-radius: 4px;
+}
+#btn-toggle-sim:hover {
+    background-color: rgba(59, 130, 246, 0.1) !important;
+}
+
+/* --- COLUMNA 2: PANEL CENTRAL (Árbol) --- */
+.center-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.5rem;
+    overflow-y: auto;
+    position: relative;
+    background-color: var(--bg-dark);
+}
+
+.tree-section h2 {
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    z-index: 10;
+}
+
+.tree-container {
+    position: relative;
+    width: 100%;
+    max-width: 900px; 
+    display: flex;
+    justify-content: center;
+    padding: 1rem 0;
+    flex: 1;
+}
+
+/* --- LÍNEAS CONECTORAS (SVG) --- */
+#tree-lines {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.path-line {
+    stroke: var(--border-color);
+    stroke-width: 3;
+    stroke-dasharray: 6, 6;
+    fill: none;
+    transition: stroke 0.3s ease;
+}
+
+.path-line.active {
+    stroke: var(--grass-green);
+    stroke-dasharray: none;
+}
+
+/* --- ENVOLTORIO Y FILAS DE NODOS --- */
+.nodes-wrapper {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3.2rem; 
+    width: 100%;
+}
+
+.tier-row {
+    display: flex;
+    justify-content: center;
+    gap: 6.5rem; 
+    width: 100%;
+}
+
+/* --- DISEÑO DE LOS NODOS --- */
+.event-node {
+    background-color: var(--panel-bg);
+    border: 3px solid var(--border-color);
+    width: 65px; 
+    height: 65px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    font-size: 1.8rem;
+    position: relative;
+    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.event-node:hover {
+    transform: scale(1.15);
+}
+
+.event-node::after {
+    content: attr(data-title);
+    position: absolute;
+    bottom: -32px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 20;
+}
+
+.event-node:hover::after {
+    opacity: 1;
+}
+
+.event-node.active {
+    border-color: var(--action-blue);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.7);
+    animation: pulse 2s infinite;
+}
+
+.event-node.completed {
+    background-color: var(--grass-green);
+    border-color: var(--grass-green);
+    color: white;
+    cursor: default;
+}
+
+.event-node.locked {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+    70% { box-shadow: 0 0 0 15px rgba(59, 130, 246, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+/* --- COLUMNA 3: PANEL DERECHO (Historial) --- */
+.right-panel {
+    background-color: var(--panel-bg);
+    border-left: 2px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.game-log {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem;
+    overflow: hidden;
+}
+
+.game-log h3 {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+#log-list {
+    list-style: none;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    padding-right: 0.5rem;
+}
+
+#log-list::-webkit-scrollbar, .left-panel::-webkit-scrollbar, .center-panel::-webkit-scrollbar {
+    width: 6px;
+}
+#log-list::-webkit-scrollbar-thumb, .left-panel::-webkit-scrollbar-thumb, .center-panel::-webkit-scrollbar-thumb {
+    background-color: var(--border-color);
+    border-radius: 4px;
+}
+
+.log-entry {
+    font-size: 0.9rem;
+    padding: 0.8rem;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    border-left: 3px solid var(--border-color);
+    line-height: 1.4;
+}
+
+.log-entry.system {
+    border-left-color: var(--grass-green);
+    color: var(--grass-green);
+    background-color: rgba(16, 185, 129, 0.05);
+}
+
+.log-entry.injury {
+    border-left-color: var(--danger-red);
+    color: var(--danger-red);
+    background-color: rgba(239, 68, 68, 0.05);
+    font-weight: bold;
+}
+
+/* --- POP-UP CENTRAL NORMAL --- */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.85); 
+    backdrop-filter: blur(6px); 
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 3000;
+}
+
+.modal-content {
+    background-color: var(--panel-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 2.5rem;
+    width: 90%;
+    max-width: 500px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.modal-content h3 {
+    color: var(--action-blue);
+    font-size: 1.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.modal-desc {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    line-height: 1.5;
+}
+
+.modal-dynamic {
+    min-height: 80px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+.match-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: var(--bg-dark);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.match-team {
+    flex: 1;
+    font-size: 1.2rem;
+    color: var(--text-light);
+}
+
+.match-score {
+    font-size: 2.5rem;
+    color: var(--grass-green);
+    padding: 0 1rem;
+}
+
+.rating-up {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--grass-green);
+    padding: 1.5rem 3rem;
+    border-radius: 50px;
+    border: 2px solid var(--grass-green);
+    font-size: 2.5rem;
+    animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* --- PARTIDO EN DIRECTO --- */
+#live-match-events::-webkit-scrollbar {
+    width: 6px;
+}
+#live-match-events::-webkit-scrollbar-thumb {
+    background-color: var(--border-color);
+    border-radius: 4px;
+}
+
+.live-event {
+    padding: 0.6rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    animation: fadeIn 0.3s ease-in;
+    line-height: 1.4;
+}
+
+.live-event.goal {
+    color: var(--grass-green);
+    background: rgba(16, 185, 129, 0.1);
+    border-radius: 4px;
+    border-left: 3px solid var(--grass-green);
+    font-weight: bold;
+}
+
+.live-event.highlight {
+    color: var(--gold-star);
+}
+
+.live-event.injury {
+    color: var(--danger-red);
+    background: rgba(239, 68, 68, 0.1);
+    border-left: 3px solid var(--danger-red);
+    font-weight: bold;
+}
+
+.live-event.end {
+    text-align: center;
+    color: var(--action-blue);
+    font-weight: bold;
+    font-size: 1.1rem;
+    border-bottom: none;
+    margin-top: 10px;
+}
+
+/* Botones y Opciones */
+.choices-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.choice-btn {
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+    border: 1px solid var(--action-blue);
+    padding: 1.2rem;
+    font-size: 1.05rem;
+    text-align: center;
+}
+
+.choice-btn:hover {
+    background-color: var(--action-blue);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(59, 130, 246, 0.3);
+}
+
+/* --- ESTILOS DE RETIRADA (SALÓN DE LA FAMA) --- */
+.retirement-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.retire-box {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--gold-star);
+    padding: 1.5rem;
+    border-radius: 8px;
+    text-align: center;
+    box-shadow: inset 0 0 20px rgba(251, 191, 36, 0.05);
+}
+
+.retire-box h4 {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+}
+
+.retire-box span {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: var(--gold-star);
+}
+
+.retire-clubs {
+    grid-column: span 2;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border-color);
+    padding: 1.5rem;
+    border-radius: 8px;
+    text-align: left;
+}
+
+.retire-clubs h4 {
+    color: var(--gold-star);
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.retire-clubs p {
+    color: var(--text-light);
+    line-height: 1.6;
+    font-size: 1.1rem;
+}

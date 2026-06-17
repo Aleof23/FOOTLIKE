@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FUTLIKE - Carrera Roguelike</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="start-screen" class="start-screen">
+        <div id="start-menu" class="start-menu">
+            <h1 class="main-title">FUTLIKE</h1>
+            <p class="subtitle">Simulador de Carrera Roguelike</p>
+            <div class="start-buttons">
+                <button id="btn-continue" class="choice-btn action-btn hidden">Continuar Carrera</button>
+                <button id="btn-new-career" class="choice-btn">Nueva Carrera</button>
+            </div>
+        </div>
+        
+        <div id="new-career-form" class="new-career-form hidden">
+            <h2>Crea tu Leyenda</h2>
+            <div class="form-group">
+                <label for="input-name">Nombre del Jugador:</label>
+                <input type="text" id="input-name" placeholder="Ej. Lionel Messi" maxlength="20" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="input-number">Dorsal Preferido:</label>
+                <input type="number" id="input-number" placeholder="Ej. 10" min="1" max="99">
+            </div>
+            <div class="form-group">
+                <label for="input-position">Posición en el Campo:</label>
+                <select id="input-position">
+                    <option value="DC">Delantero Centro (DC)</option>
+                    <option value="EXT">Extremo (EI/ED)</option>
+                    <option value="MC">Mediocentro (MC/MCO)</option>
+                    <option value="DEF">Defensa (DFC/LI/LD)</option>
+                </select>
+            </div>
+            <div class="form-buttons">
+                <button id="btn-start-game" class="choice-btn action-btn">Empezar Carrera</button>
+                <button id="btn-back-menu" class="danger-btn">Volver</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-ui" class="game-layout hidden">
+        
+        <aside class="left-panel">
+            <header class="game-header">
+                <h1>FUTLIKE</h1>
+            </header>
+            
+            <div id="player-profile" class="stats-container">
+                <div class="stat-group profile-header">
+                    <h2 id="stat-name" class="player-name">Nombre Jugador</h2>
+                    <p class="player-details"><span id="stat-position">DC</span> | Dorsal <span id="stat-number">10</span></p>
+                </div>
+
+                <div class="stat-group">
+                    <p><strong>Edad:</strong> <span id="stat-age">18</span> años</p>
+                    <p><strong>Equipo:</strong> <span id="stat-team">Agente Libre</span></p>
+                    <p><strong>Temporada:</strong> <span id="stat-season">1</span></p>
+                </div>
+                <div class="stat-group">
+                    <p><strong>GRL:</strong> <span id="stat-rating">60.0</span></p>
+                    <p><strong>Goles:</strong> <span id="stat-goals">0</span></p>
+                    <p><strong>Asistencias:</strong> <span id="stat-assists">0</span></p>
+                </div>
+                <div class="stat-group">
+                    <p><strong>Partidos:</strong> <span id="stat-matches">0</span></p>
+                    <p><strong>Trofeos:</strong> <span id="stat-trophies">0</span></p>
+                </div>
+                
+                <div class="stat-group" style="padding: 0.5rem; text-align: center;">
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.3rem;">Simulación de Partidos:</p>
+                    <button id="btn-toggle-sim" style="width: 100%; font-size: 0.85rem; padding: 0.5rem; background-color: var(--bg-dark); color: var(--action-blue); border: 1px solid var(--action-blue);">⏱️ SOLO FINALES</button>
+                </div>
+
+                <button id="btn-retire" class="action-btn" style="margin-top: auto; margin-bottom: 10px; background-color: #fbbf24; color: #000; border-color: #fbbf24;">Colgar las Botas</button>
+                <button id="btn-reset" class="danger-btn">Abandonar Carrera</button>
+            </div>
+        </aside>
+
+        <main class="center-panel tree-section">
+            <h2>Mapa de Temporada</h2>
+            <div id="event-tree" class="tree-container">
+                <svg id="tree-lines"></svg>
+                <div id="nodes-wrapper" class="nodes-wrapper">
+                    </div>
+            </div>
+        </main>
+
+        <aside class="right-panel">
+            <section class="game-log full-height">
+                <h3>Historial de Carrera</h3>
+                <ul id="log-list">
+                    </ul>
+            </section>
+        </aside>
+    </div>
+
+    <div id="event-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3 id="modal-title">Título del Evento</h3>
+            <div id="modal-dynamic-content" class="modal-dynamic"></div>
+            <p id="modal-desc" class="modal-desc">Descripción...</p>
+            <div id="modal-choices" class="choices-container">
+                </div>
+        </div>
+    </div>
+
+    <div id="live-match-modal" class="modal-overlay hidden" style="z-index: 3500;">
+        <div class="modal-content" style="max-width: 600px;">
+            <h3 id="live-match-title" style="color: var(--action-blue);">Partido en Directo</h3>
+            
+            <div class="match-result" style="display:flex; justify-content:space-between; align-items:center; width:100%; padding: 1.5rem; background: #000; border-radius: 8px;">
+                <div style="display:flex; flex-direction:column; align-items:center; flex:1;">
+                    <div id="live-team1-logo"></div>
+                    <span id="live-team1-name" class="match-team" style="text-align:center; margin-top:10px;">Local</span>
+                </div>
+                <div style="display:flex; flex-direction:column; align-items:center; padding:0 20px;">
+                    <span id="live-match-time" style="color:var(--text-muted); font-size:1.2rem; margin-bottom:5px;">0'</span>
+                    <span style="font-size:3.5rem; font-weight:bold; color:var(--text-light); letter-spacing: 2px;">
+                        <span id="live-score1">0</span> - <span id="live-score2">0</span>
+                    </span>
+                </div>
+                <div style="display:flex; flex-direction:column; align-items:center; flex:1;">
+                    <div id="live-team2-logo"></div>
+                    <span id="live-team2-name" class="match-team" style="text-align:center; margin-top:10px;">Visitante</span>
+                </div>
+            </div>
+
+            <div id="live-match-events" style="height: 180px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; text-align: left; font-size: 0.95rem; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px;">
+                </div>
+            
+            <div id="live-match-choices" class="choices-container">
+                <button id="btn-skip-match" class="choice-btn">Saltar al Final ⏭️</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="retirement-screen" class="start-screen hidden" style="z-index: 4000;">
+        <div class="start-menu" style="max-width: 650px; border-color: #fbbf24;">
+            <h1 class="main-title" style="color: #fbbf24;">LEYENDA</h1>
+            <p class="subtitle">Has decidido colgar las botas y retirarte del fútbol profesional.</p>
+            
+            <div id="retirement-summary" class="stats-container" style="text-align: left; margin-bottom: 2rem;">
+                </div>
+            
+            <div class="form-buttons">
+                <button id="btn-back-to-main" class="choice-btn action-btn" style="background-color: #fbbf24 !important; border-color: #fbbf24 !important;">Volver al Menú Principal</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
