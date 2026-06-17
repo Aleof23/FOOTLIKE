@@ -1,5 +1,6 @@
 // --- ESTADO GLOBAL DEL JUEGO ---
 const SAVE_KEY = 'football_roguelike_save';
+const HISTORY_KEY = 'football_roguelike_history'; 
 
 const defaultState = {
     playerName: "Jugador",
@@ -10,6 +11,7 @@ const defaultState = {
     team: "Agente Libre",
     league: "Ninguna",
     rating: 60, 
+    potential: 85,
     goals: 0,
     assists: 0,
     matches: 0,
@@ -17,6 +19,9 @@ const defaultState = {
     goalsThisSeason: 0,
     assistsThisSeason: 0,
     trophies: 0,
+    ballonsDor: 0,       
+    goldenBoots: 0,      
+    titlesList: [],      
     teamsPlayed: [],
     currentTier: 0, 
     currentNodeId: null, 
@@ -25,29 +30,36 @@ const defaultState = {
     currentFinalIndex: 0, 
     simMode: 1,
     seasonsAtCurrentClub: 0, 
-    upgradedClubs: {}        
+    upgradedClubs: {},
+    visitedNodes: [],
+    titlesThisSeason: 0,
+    transfersThisSeason: []
 };
 
 let gameState = {};
 
-// --- CONFIGURACIÓN DE ESCUDOS ---
 const IMAGE_FOLDER = "graphics"; 
 const IMAGE_EXT = ".png";        
 
-// --- ELEMENTOS DEL DOM ---
 const DOM = {
     startScreen: document.getElementById('start-screen'),
     startMenu: document.getElementById('start-menu'),
     btnContinue: document.getElementById('btn-continue'),
     btnNewCareer: document.getElementById('btn-new-career'),
+    btnPastCareers: document.getElementById('btn-past-careers'), 
+    
     newCareerForm: document.getElementById('new-career-form'),
     inputName: document.getElementById('input-name'),
     inputNumber: document.getElementById('input-number'),
     inputPosition: document.getElementById('input-position'),
     btnStartGame: document.getElementById('btn-start-game'),
     btnBackMenu: document.getElementById('btn-back-menu'),
-    gameUI: document.getElementById('game-ui'),
     
+    pastCareersScreen: document.getElementById('past-careers-screen'), 
+    pastCareersList: document.getElementById('past-careers-list'),     
+    btnBackFromHistory: document.getElementById('btn-back-from-history'), 
+
+    gameUI: document.getElementById('game-ui'),
     statName: document.getElementById('stat-name'),
     statPosition: document.getElementById('stat-position'),
     statNumber: document.getElementById('stat-number'),
@@ -59,6 +71,8 @@ const DOM = {
     assists: document.getElementById('stat-assists'),
     matches: document.getElementById('stat-matches'),
     trophies: document.getElementById('stat-trophies'),
+    ballon: document.getElementById('stat-ballon'),
+    boot: document.getElementById('stat-boot'),
     
     btnReset: document.getElementById('btn-reset'),
     btnRetire: document.getElementById('btn-retire'),
@@ -87,30 +101,48 @@ const DOM = {
 
     retirementScreen: document.getElementById('retirement-screen'),
     retirementSummary: document.getElementById('retirement-summary'),
-    btnBackToMain: document.getElementById('btn-back-to-main')
+    btnBackToMain: document.getElementById('btn-back-to-main'),
+    btnToggleStats: document.getElementById('btn-toggle-stats'),
+    btnToggleLog: document.getElementById('btn-toggle-log')
 };
 
-// NUEVOS ICONOS AÑADIDOS
 const EVENT_ICONS = {
-    transfer: "🤝",
-    match: "⚽",
-    training: "🏋️",
-    final_match: "🏆",
-    season_summary: "📊",
-    rest: "🛋️",
-    random: "❓"
+    transfer: "🤝", match: "⚽", training: "🏋️", final_match: "🏆",
+    season_summary: "📊", rest: "🛋️", random: "❓"
 };
 
-function randomInt(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
+function randomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+function getMarketValue() {
+    let grl = gameState.rating;
+    let age = gameState.age;
+    let base = 0.5; 
+    
+    if (grl < 60) base = 0.5 + (grl - 50) * 0.1; 
+    else if (grl < 70) base = 1.5 + (grl - 60) * 0.5; 
+    else if (grl < 80) base = 6.5 + (grl - 70) * 2; 
+    else if (grl < 90) base = 26.5 + (grl - 80) * 5; 
+    else base = 76.5 + (grl - 90) * 10; 
+    
+    let ageMult = 1;
+    if (age <= 21) ageMult = 1.5;
+    else if (age <= 24) ageMult = 1.2;
+    else if (age >= 30 && age < 34) ageMult = Math.max(0.4, 1 - ((age - 29) * 0.15)); 
+    else if (age >= 34) ageMult = 0.3; 
+    
+    return base * ageMult;
+}
+
+function formatMoney(m) {
+    if (m < 1) return (m * 1000).toFixed(0) + "K €";
+    return m.toFixed(1) + "M €";
 }
 
 function getEffectiveTier(teamName) {
     let teamInfo = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.find(t => t.name === teamName) : null;
     if (!teamInfo) return 4;
-    let baseTier = teamInfo.tier;
     let upgrades = (gameState.upgradedClubs && gameState.upgradedClubs[teamName]) ? gameState.upgradedClubs[teamName] : 0;
-    return Math.max(1, baseTier - upgrades); 
+    return Math.max(1, teamInfo.tier - upgrades); 
 }
 
 function getShieldHtml(teamId, size = "50px", isInline = false) {
@@ -122,54 +154,57 @@ function getShieldHtml(teamId, size = "50px", isInline = false) {
 
 // --- INICIALIZACIÓN ---
 function init() {
-    DOM.btnNewCareer.addEventListener('click', showNewCareerForm);
-    DOM.btnBackMenu.addEventListener('click', hideNewCareerForm);
+    DOM.btnNewCareer.addEventListener('click', () => { DOM.startMenu.classList.add('hidden'); DOM.newCareerForm.classList.remove('hidden'); });
+    DOM.btnBackMenu.addEventListener('click', () => { DOM.newCareerForm.classList.add('hidden'); DOM.startMenu.classList.remove('hidden'); });
+    DOM.btnPastCareers.addEventListener('click', showPastCareers);
+    DOM.btnBackFromHistory.addEventListener('click', () => { DOM.pastCareersScreen.classList.add('hidden'); DOM.startMenu.classList.remove('hidden'); });
+    
     DOM.btnStartGame.addEventListener('click', startNewCareer);
     DOM.btnContinue.addEventListener('click', continueCareer);
     DOM.btnReset.addEventListener('click', resetGame);
-    
     DOM.btnRetire.addEventListener('click', confirmRetirement);
     DOM.btnBackToMain.addEventListener('click', () => location.reload());
-    
     DOM.btnToggleSim.addEventListener('click', toggleSimMode);
 
     window.addEventListener('resize', drawLines);
-    checkSaveData();
-}
-
-function checkSaveData() {
     if (localStorage.getItem(SAVE_KEY)) DOM.btnContinue.classList.remove('hidden');
-}
 
-function showNewCareerForm() {
-    DOM.startMenu.classList.add('hidden');
-    DOM.newCareerForm.classList.remove('hidden');
-}
-
-function hideNewCareerForm() {
-    DOM.newCareerForm.classList.add('hidden');
-    DOM.startMenu.classList.remove('hidden');
+    // Eventos para el menú móvil
+    if (DOM.btnToggleStats) {
+        DOM.btnToggleStats.addEventListener('click', () => {
+            document.querySelector('.left-panel').classList.toggle('mobile-visible');
+            document.querySelector('.right-panel').classList.remove('mobile-visible');
+        });
+    }
+    if (DOM.btnToggleLog) {
+        DOM.btnToggleLog.addEventListener('click', () => {
+            document.querySelector('.right-panel').classList.toggle('mobile-visible');
+            document.querySelector('.left-panel').classList.remove('mobile-visible');
+        });
+    }
 }
 
 function startNewCareer() {
-    const name = DOM.inputName.value.trim() || "Promesa Anónima";
-    const number = DOM.inputNumber.value || 10;
-    const position = DOM.inputPosition.value;
+    let pRoll = Math.random() * 100;
+    let pot = 85;
+    if (pRoll < 40) pot = randomInt(80, 84);
+    else if (pRoll < 75) pot = randomInt(85, 89);
+    else if (pRoll < 95) pot = randomInt(90, 94);
+    else pot = randomInt(95, 99); 
 
-    gameState = { ...defaultState };
-    gameState.teamsPlayed = [];
-    gameState.seasonTree = [];
-    gameState.upgradedClubs = {}; 
-    gameState.finalsReached = [];
-    gameState.currentFinalIndex = 0;
-    gameState.playerName = name;
-    gameState.playerNumber = number;
-    gameState.playerPosition = position;
-
+    gameState = { ...defaultState, 
+        playerName: DOM.inputName.value.trim() || "Promesa Anónima",
+        playerNumber: DOM.inputNumber.value || 10,
+        playerPosition: DOM.inputPosition.value,
+        rating: randomInt(50, 70), 
+        potential: pot,
+        teamsPlayed: [], seasonTree: [], upgradedClubs: {}, finalsReached: [], titlesList: [],
+        visitedNodes: [], titlesThisSeason: 0, transfersThisSeason: []
+    };
     generateDiamondTree();
     saveState();
     startGameUI();
-    addLog(`¡Bienvenido al fútbol profesional, ${name}! Inicias como ${position}.`, "system");
+    addLog(`¡Bienvenido al fútbol profesional, ${gameState.playerName}! Inicias como ${gameState.playerPosition} con ${gameState.rating} GRL.`, "system");
 }
 
 function continueCareer() {
@@ -179,6 +214,13 @@ function continueCareer() {
     if (gameState.upgradedClubs === undefined) gameState.upgradedClubs = {};
     if (gameState.finalsReached === undefined) gameState.finalsReached = [];
     if (gameState.currentFinalIndex === undefined) gameState.currentFinalIndex = 0;
+    if (gameState.ballonsDor === undefined) gameState.ballonsDor = 0;
+    if (gameState.goldenBoots === undefined) gameState.goldenBoots = 0;
+    if (gameState.titlesList === undefined) gameState.titlesList = [];
+    if (gameState.visitedNodes === undefined) gameState.visitedNodes = [];
+    if (gameState.titlesThisSeason === undefined) gameState.titlesThisSeason = 0;
+    if (gameState.transfersThisSeason === undefined) gameState.transfersThisSeason = [];
+    if (gameState.potential === undefined) gameState.potential = randomInt(85, 95);
     
     startGameUI();
     addLog("Partida cargada correctamente.", "system");
@@ -192,12 +234,10 @@ function startGameUI() {
     renderTree();
 }
 
-function saveState() {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(gameState));
-}
+function saveState() { localStorage.setItem(SAVE_KEY, JSON.stringify(gameState)); }
 
 function resetGame() {
-    if (confirm("¿Seguro que quieres abandonar tu carrera y volver al menú principal? Se borrará todo.")) {
+    if (confirm("¿Seguro que quieres abandonar tu carrera? No se guardará en el Salón de la Fama.")) {
         localStorage.removeItem(SAVE_KEY);
         location.reload();
     }
@@ -215,54 +255,99 @@ function updateSimBtnText() {
     else DOM.btnToggleSim.innerHTML = "⏱️ COMPLETA";
 }
 
-function confirmRetirement() {
-    if (confirm("¿Estás seguro de que quieres colgar las botas? Esto finalizará tu carrera para siempre y te llevará al salón de la fama.")) {
-        retirePlayer();
+function calculateCareerScore() {
+    let g = gameState.goals; let a = gameState.assists; let bo = gameState.ballonsDor || 0;
+    let championsCount = 0; let otherTitlesCount = 0;
+    if (gameState.titlesList) {
+        gameState.titlesList.forEach(t => {
+            if (t.toLowerCase().includes("champions")) championsCount++; else otherTitlesCount++;
+        });
     }
+
+    let G_score = 10 * (1 - Math.exp(-g / 250));
+    let A_score = 10 * (1 - Math.exp(-a / 150));
+    let BO_score = 10 * (1 - Math.exp(-bo / 1.5));
+    let MC_score = 10 * (1 - Math.exp(-championsCount / 2));
+    let TC_score = 10 * (1 - Math.exp(-otherTitlesCount / 5));
+
+    let numClubs = gameState.teamsPlayed.length || 1;
+    let CL_score = Math.max(0, 10 - Math.abs(numClubs - 4) * 2);
+
+    let finalScore = 0; let pos = gameState.playerPosition;
+    if (pos === "DC" || pos === "EXT") finalScore = (G_score * 0.35) + (BO_score * 0.20) + (MC_score * 0.15) + (A_score * 0.12) + (TC_score * 0.10) + (CL_score * 0.08);
+    else if (pos === "MC") finalScore = (BO_score * 0.25) + (A_score * 0.25) + (MC_score * 0.18) + (G_score * 0.12) + (TC_score * 0.12) + (CL_score * 0.08);
+    else if (pos === "DEF") finalScore = (BO_score * 0.25) + (MC_score * 0.25) + (G_score * 0.15) + (A_score * 0.10) + (TC_score * 0.17) + (CL_score * 0.08);
+
+    return Math.max(1, Math.min(10, finalScore)).toFixed(2);
+}
+
+function showPastCareers() {
+    DOM.startMenu.classList.add('hidden');
+    DOM.pastCareersScreen.classList.remove('hidden');
+    let history = JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
+    DOM.pastCareersList.innerHTML = '';
+    if (history.length === 0) { DOM.pastCareersList.innerHTML = '<p style="color:var(--text-muted);">Aún no hay leyendas registradas.</p>'; return; }
+
+    history.forEach(c => {
+        let div = document.createElement('div'); div.className = 'history-card';
+        div.innerHTML = `
+            <div><h4 style="color:var(--text-light); margin-bottom:5px;">${c.name} (${c.position})</h4>
+            <p style="font-size:0.85rem; color:var(--text-muted);">Goles: ${c.goals} | Asistencias: ${c.assists} <br>🏆 Títulos: ${c.titles} | 🌕 Balones: ${c.ballons}</p></div>
+            <div class="history-card-score">${c.score}</div>
+        `;
+        DOM.pastCareersList.appendChild(div);
+    });
+}
+
+function confirmRetirement() {
+    if (confirm("¿Estás seguro de que quieres colgar las botas? Esto finalizará tu carrera para siempre y calculará tu nota final.")) retirePlayer();
 }
 
 function retirePlayer() {
     DOM.gameUI.classList.add('hidden');
     DOM.retirementScreen.classList.remove('hidden');
 
-    let clubsHtml = gameState.teamsPlayed.map(teamName => {
-        let teamInfo = TEAMS_DB.find(t => t.name === teamName);
-        let tId = teamInfo ? teamInfo.id : "default";
-        return getShieldHtml(tId, "45px", true);
-    }).join("");
+    let finalScore = calculateCareerScore();
+    let history = JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
+    history.push({ name: gameState.playerName, position: gameState.playerPosition, score: finalScore, goals: gameState.goals, assists: gameState.assists, ballons: gameState.ballonsDor || 0, titles: gameState.trophies });
+    history.sort((a, b) => parseFloat(b.score) - parseFloat(a.score));
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
 
-    if(clubsHtml === "") clubsHtml = "<span style='color:var(--text-muted)'>Ninguno (Leal a la Agencia Libre)</span>";
+    let clubsHtml = gameState.teamsPlayed.map(tName => { let tInfo = TEAMS_DB.find(t => t.name === tName); return getShieldHtml(tInfo ? tInfo.id : "default", "45px", true); }).join("") || "<span style='color:var(--text-muted)'>Ninguno</span>";
+    let titlesHtml = "";
+    if (gameState.titlesList && gameState.titlesList.length > 0) {
+        let counts = {}; gameState.titlesList.forEach(t => counts[t] = (counts[t] || 0) + 1);
+        for (let [title, count] of Object.entries(counts)) { titlesHtml += `<span style="display:inline-block; background:rgba(251,191,36,0.15); color:var(--gold-star); padding:6px 10px; border-radius:6px; margin:4px; font-size:0.95rem; border:1px solid var(--gold-star);">🏆 ${title} x${count}</span>`; }
+    } else titlesHtml = "<span style='color:var(--text-muted)'>No levantaste ningún título.</span>";
 
     DOM.retirementSummary.innerHTML = `
         <div class="retirement-stats-grid">
-            <div class="retire-box">
-                <h4>Partidos</h4>
-                <span>${gameState.matches}</span>
+            <div class="retire-box" style="grid-column: span 2; border-color: #fbbf24; box-shadow: 0 0 20px rgba(251, 191, 36, 0.4);">
+                <h4 style="color: #fbbf24;">NOTA GLOBAL DE CARRERA</h4><span style="font-size: 4rem;">${finalScore} <span style="font-size:1.5rem; color:var(--text-muted)">/ 10</span></span>
             </div>
-            <div class="retire-box">
-                <h4>Goles</h4>
-                <span>${gameState.goals}</span>
-            </div>
-            <div class="retire-box">
-                <h4>Asistencias</h4>
-                <span>${gameState.assists}</span>
-            </div>
-            <div class="retire-box">
-                <h4>Trofeos</h4>
-                <span>${gameState.trophies}</span>
-            </div>
-            <div class="retire-clubs">
-                <h4>Clubes Representados</h4>
-                <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;">
-                    ${clubsHtml}
-                </div>
-            </div>
+            <div class="retire-box"><h4>Partidos</h4><span>${gameState.matches}</span></div><div class="retire-box"><h4>Goles</h4><span>${gameState.goals}</span></div>
+            <div class="retire-box"><h4>Asistencias</h4><span>${gameState.assists}</span></div><div class="retire-box"><h4>Trofeos</h4><span>${gameState.trophies}</span></div>
+            <div class="retire-box" style="border-color: #fbbf24;"><h4 style="color: #fbbf24;">Balones de Oro 🌕</h4><span>${gameState.ballonsDor || 0}</span></div>
+            <div class="retire-box" style="border-color: #fbbf24;"><h4 style="color: #fbbf24;">Botas de Oro 👟</h4><span>${gameState.goldenBoots || 0}</span></div>
+            <div class="retire-clubs" style="grid-column: span 2;"><h4>Palmarés (Títulos)</h4><div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:10px;">${titlesHtml}</div></div>
+            <div class="retire-clubs" style="grid-column: span 2;"><h4>Clubes Representados</h4><div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;">${clubsHtml}</div></div>
         </div>
     `;
-    localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem(SAVE_KEY); 
 }
 
 function updateUI() {
+    if (!document.getElementById('stat-ballon')) {
+        let statContainer = document.querySelector('.stats-container');
+        if (statContainer) {
+            let newGroup = document.createElement('div'); newGroup.className = 'stat-group';
+            newGroup.innerHTML = `<p><strong>Balones Oro:</strong> <span id="stat-ballon">0</span> 🌕</p><p><strong>Botas Oro:</strong> <span id="stat-boot">0</span> 👟</p>`;
+            let toggleGroup = document.getElementById('btn-toggle-sim').parentElement;
+            statContainer.insertBefore(newGroup, toggleGroup);
+            DOM.ballon = document.getElementById('stat-ballon'); DOM.boot = document.getElementById('stat-boot');
+        }
+    }
+
     DOM.statName.textContent = gameState.playerName;
     DOM.statPosition.textContent = gameState.playerPosition;
     DOM.statNumber.textContent = gameState.playerNumber;
@@ -277,55 +362,83 @@ function updateUI() {
     DOM.assists.textContent = gameState.assists;
     DOM.matches.textContent = gameState.matches;
     DOM.trophies.textContent = gameState.trophies;
+
+    if (DOM.ballon) DOM.ballon.textContent = gameState.ballonsDor || 0;
+    if (DOM.boot) DOM.boot.textContent = gameState.goldenBoots || 0;
 }
 
 function addLog(msg, type = "normal") {
-    const li = document.createElement('li');
-    li.textContent = `[T${gameState.season}] ${msg}`;
-    li.className = `log-entry ${type}`;
+    const li = document.createElement('li'); li.textContent = `[T${gameState.season}] ${msg}`; li.className = `log-entry ${type}`;
     DOM.logList.prepend(li);
 }
 
 function openModal(title, desc) {
-    DOM.modalTitle.textContent = title;
-    DOM.modalDesc.innerHTML = desc; 
-    DOM.modalDynamic.innerHTML = ''; 
-    DOM.modalChoices.innerHTML = '';
-    DOM.modalOverlay.classList.remove('hidden');
+    DOM.modalTitle.textContent = title; DOM.modalDesc.innerHTML = desc; DOM.modalDynamic.innerHTML = ''; DOM.modalChoices.innerHTML = ''; DOM.modalOverlay.classList.remove('hidden');
 }
 
 function addChoice(html, action, isDanger = false) {
-    const btn = document.createElement('button');
-    btn.className = `choice-btn ${isDanger ? 'danger' : ''}`;
-    btn.innerHTML = html;
-    btn.addEventListener('click', action);
-    DOM.modalChoices.appendChild(btn);
+    const btn = document.createElement('button'); btn.className = `choice-btn ${isDanger ? 'danger' : ''}`; btn.innerHTML = html;
+    btn.addEventListener('click', action); DOM.modalChoices.appendChild(btn);
 }
 
 function showModalResult(title, dynamicHtml, descHtml, continueCallback) {
-    DOM.modalTitle.textContent = title;
-    DOM.modalDynamic.innerHTML = dynamicHtml;
-    DOM.modalDesc.innerHTML = descHtml;
-    DOM.modalChoices.innerHTML = '';
-    addChoice("Continuar", continueCallback);
-    DOM.modalOverlay.classList.remove('hidden');
+    DOM.modalTitle.textContent = title; DOM.modalDynamic.innerHTML = dynamicHtml; DOM.modalDesc.innerHTML = descHtml; DOM.modalChoices.innerHTML = '';
+    addChoice("Continuar", continueCallback); DOM.modalOverlay.classList.remove('hidden');
 }
 
 function getInjuryMultiplier() {
-    if (gameState.age >= 40) return 3;
-    if (gameState.age >= 34) return 2;
-    return 1;
+    if (gameState.age >= 40) return 3; if (gameState.age >= 34) return 2; return 1;
+}
+
+function silentlySimulateRemainingFinals() {
+    if (!gameState.finalsReached || gameState.finalsReached.length === 0) return;
+    
+    while (gameState.currentFinalIndex < gameState.finalsReached.length) {
+        let finalName = gameState.finalsReached[gameState.currentFinalIndex];
+        gameState.currentFinalIndex++;
+        
+        let myTier = getEffectiveTier(gameState.team);
+        let rivalTier = randomInt(1, 2);
+        let myGoals = randomInt(0, 2);
+        let rivGoals = randomInt(0, 2);
+        
+        let tierDiff = rivalTier - myTier;
+        if (tierDiff > 0) myGoals += randomInt(0, tierDiff);
+        else if (tierDiff < 0) rivGoals += randomInt(0, Math.abs(tierDiff) * 2);
+        
+        let won = (myGoals > rivGoals) || (myGoals === rivGoals && Math.random() > 0.5);
+        if (won) {
+            gameState.trophies++;
+            if (!gameState.titlesList) gameState.titlesList = [];
+            gameState.titlesList.push(`${finalName} (${gameState.team})`);
+            gameState.titlesThisSeason = (gameState.titlesThisSeason || 0) + 1;
+            addLog(`[Simulado] Tu equipo GANÓ la final de ${finalName} sin ti (${myGoals}-${rivGoals}). ¡Campeones!`, "system");
+        } else {
+            addLog(`[Simulado] Tu equipo perdió la final de ${finalName} (${myGoals}-${rivGoals}) por tu ausencia.`, "injury");
+        }
+    }
 }
 
 function applyInjury(sourceContext) {
+    // DISTRIBUCIÓN POR GRAVEDAD
     const injuries = [
-        { name: "Rotura de Ligamento Cruzado", skip: 99, penalty: 8 },
-        { name: "Esguince Grave", skip: 3, penalty: 5 },
-        { name: "Lesión en el Gemelo", skip: 2, penalty: 3 },
-        { name: "Molestias en el Cuádriceps", skip: 1, penalty: 2 }
+        { name: "Rotura de Ligamento Cruzado", skip: 99, penalty: 8, weight: 5 }, // 5%
+        { name: "Esguince Grave", skip: 3, penalty: 5, weight: 20 },            // 20%
+        { name: "Lesión en el Gemelo", skip: 2, penalty: 3, weight: 35 },         // 35%
+        { name: "Molestias en el Cuádriceps", skip: 1, penalty: 2, weight: 40 }   // 40%
     ];
     
-    let injury = injuries[Math.floor(Math.random() * injuries.length)];
+    let roll = Math.random() * 100;
+    let sum = 0;
+    let injury = injuries[0];
+    
+    for (let inj of injuries) {
+        sum += inj.weight;
+        if (roll <= sum) {
+            injury = inj;
+            break;
+        }
+    }
     
     gameState.rating -= injury.penalty;
     gameState.rating = Math.max(40, Math.min(99, gameState.rating));
@@ -336,55 +449,56 @@ function applyInjury(sourceContext) {
     let dynamicHtml = `<div style="font-size:4rem">🚑</div>`;
     let descHtml = `Has sufrido una <strong>${injury.name}</strong> durante el ${sourceContext}. <br><br><strong style="color:var(--danger-red);">Repercusión médica: -${injury.penalty} GRL</strong><br>Tu media ha bajado a: ${displayRating}.`;
     
-    if (injury.skip === 99) {
-        descHtml += "<br><br>Te pierdes el resto de la temporada por completo. Se acabó el año para ti...";
-    } else {
-        descHtml += `<br><br>Estarás de baja de forma obligatoria y te perderás los próximos ${injury.skip} eventos del calendario.`;
-    }
+    if (injury.skip === 99) descHtml += "<br><br>Te pierdes el resto de la temporada por completo. Se acabó el año para ti...";
+    else descHtml += `<br><br>Estarás de baja de forma obligatoria y te perderás los próximos ${injury.skip} eventos del calendario.`;
     
     showModalResult("¡LESIÓN GRAVE!", dynamicHtml, descHtml, () => {
+        let newTier = gameState.currentTier + injury.skip + 1;
+        
+        if (injury.skip === 99 || newTier > 5) silentlySimulateRemainingFinals();
+        
         if (injury.skip === 99) {
             DOM.modalOverlay.classList.add('hidden');
             endSeason();
         } else {
-            gameState.currentTier += (injury.skip + 1); 
-            if (gameState.currentTier >= gameState.seasonTree.length) {
-                resolveSeasonSummary(); 
-            } else {
-                DOM.modalOverlay.classList.add('hidden');
-                saveState();
-                updateUI();
-                renderTree();
-            }
+            gameState.currentTier = newTier; 
+            if (gameState.currentTier >= gameState.seasonTree.length) resolveSeasonSummary(); 
+            else { DOM.modalOverlay.classList.add('hidden'); saveState(); updateUI(); renderTree(); }
         }
     });
 }
 
 function getOfferTier(rating) {
     let r = Math.random() * 100;
-    if (rating >= 85) {
-        if (r < 80) return 1; if (r < 95) return 2; if (r < 99) return 3; return 4;
-    } else if (rating >= 75) {
-        if (r < 12) return 1; if (r < 82) return 2; if (r < 96) return 3; return 4;
-    } else if (rating >= 65) {
-        if (r < 4) return 1; if (r < 17) return 2; if (r < 80) return 3; return 4;
-    } else {
-        return 4; 
-    }
+    if (rating >= 85) { if (r < 80) return 1; if (r < 95) return 2; if (r < 99) return 3; return 4; } 
+    else if (rating >= 75) { if (r < 12) return 1; if (r < 82) return 2; if (r < 96) return 3; return 4; } 
+    else if (rating >= 65) { if (r < 4) return 1; if (r < 17) return 2; if (r < 80) return 3; return 4; } 
+    else { return 4; }
 }
 
-// --- MANEJO DE EVENTOS ---
 function openActionPanel(node) {
     gameState.currentNodeId = node.id; 
     
+    if (!gameState.visitedNodes) gameState.visitedNodes = [];
+    gameState.visitedNodes.push(node.id);
+
     let myTeamInfo = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.find(t => t.name === gameState.team) : null;
     let myTeamId = myTeamInfo ? myTeamInfo.id : "default";
 
     if (node.type === 'transfer') {
-        openModal("Mercado de Fichajes", "Tu agente te trae ofertas basadas en tu rendimiento actual.");
+        let marketVal = getMarketValue();
+        
+        // NÚMERO DE OFERTAS ALEATORIO
+        let offerCountRoll = Math.random() * 100;
+        let numOffers = 0;
+        if (offerCountRoll < 5) numOffers = 0;       // 5% cero ofertas
+        else if (offerCountRoll < 30) numOffers = 1; // 25% una oferta
+        else if (offerCountRoll < 70) numOffers = 2; // 40% dos ofertas
+        else if (offerCountRoll < 95) numOffers = 3; // 25% tres ofertas
+        else numOffers = randomInt(4, 5);            // 5% cuatro o cinco ofertas
         
         let offers = [];
-        for(let i=0; i<2; i++) {
+        for(let i=0; i<numOffers; i++) {
             let targetTier = getOfferTier(gameState.rating);
             let possibleTeams = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.filter(t => getEffectiveTier(t.name) === targetTier && t.name !== gameState.team) : [];
             if(possibleTeams.length > 0) {
@@ -393,41 +507,59 @@ function openActionPanel(node) {
             }
         }
 
-        offers.forEach(offer => {
+        let offerData = offers.map(o => { return { ...o, fee: marketVal * ((Math.random() * 0.4) + 0.8) }; });
+
+        // DESPIDOS
+        let isFired = false;
+        let firedMsg = "";
+        if (gameState.team !== "Agente Libre") {
+            if (Math.random() < 0.15) { // 15% de probabilidad de ser despedido
+                isFired = true;
+                firedMsg = `<br><br><span style="color:var(--danger-red);"><strong>¡ATENCIÓN!</strong> El ${gameState.team} ha decidido no renovar tu contrato. Te han enseñado la puerta de salida.</span>`;
+            }
+        }
+
+        openModal("Mercado de Fichajes", `Tu agente te trae ofertas basadas en tu rendimiento actual.<br><br><span style="color:var(--text-muted); font-size:0.95rem;">📊 Tu Valor de Mercado aprox: <strong>${formatMoney(marketVal)}</strong></span>${firedMsg}`);
+
+        offerData.forEach(offer => {
             let logoHtml = getShieldHtml(offer.id, "24px", true);
-            addChoice(`${logoHtml} Fichar por ${offer.name} (${offer.league})`, () => acceptOffer(offer));
+            addChoice(`${logoHtml} Fichar por ${offer.name} (${formatMoney(offer.fee)})`, () => acceptOffer(offer));
         });
 
         if (gameState.team !== "Agente Libre") {
-            let myLogoHtml = getShieldHtml(myTeamId, "24px", true);
-            addChoice(`${myLogoHtml} Quedarme en el ${gameState.team}`, () => stayAtClub());
-        } else if (offers.length === 0) {
-            let fallback = TEAMS_DB[Math.floor(Math.random() * TEAMS_DB.length)];
-            let fbLogo = getShieldHtml(fallback.id, "24px", true);
-            addChoice(`${fbLogo} Aceptar oferta del ${fallback.name}`, () => acceptOffer(fallback));
-        }
+            if (!isFired) {
+                let myLogoHtml = getShieldHtml(myTeamId, "24px", true);
+                addChoice(`${myLogoHtml} Quedarme en el ${gameState.team}`, () => stayAtClub());
+            }
+        } 
         
+        // Oferta a la desesperada si te quedas en la calle y no hay ofertas
+        if (offerData.length === 0 && (gameState.team === "Agente Libre" || isFired)) {
+            let fallback = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB[Math.floor(Math.random() * TEAMS_DB.length)] : { id: 'default', name: 'FC Equipo Local', league: 'Liga', fee: marketVal };
+            fallback.fee = marketVal * ((Math.random() * 0.4) + 0.8);
+            let fbLogo = getShieldHtml(fallback.id, "24px", true);
+            addChoice(`${fbLogo} Aceptar oferta de salvación del ${fallback.name} (${formatMoney(fallback.fee)})`, () => acceptOffer(fallback));
+        } else if (offerData.length === 0 && !isFired) {
+            let myLogoHtml = getShieldHtml(myTeamId, "24px", true);
+            addChoice(`${myLogoHtml} Nadie ha ofertado. Me quedo en el ${gameState.team}`, () => stayAtClub());
+        }
+
     } else if (node.type === 'training') {
         openModal("Día de Entrenamiento", "Entrenamiento táctico y físico con el equipo.");
         addChoice("Machacarse en el gimnasio", () => resolveTraining());
-        
     } else if (node.type === 'rest') {
         openModal("Día Libre", "El calendario te da un respiro. Tienes el día para ti.");
         addChoice("Desconectar y relajarse", () => resolveRest());
-
     } else if (node.type === 'random') {
         openModal("Evento Inesperado", "La vida del futbolista está llena de sorpresas fuera del campo...");
         addChoice("Ver qué sucede", () => resolveRandomEvent());
-
     } else if (node.type === 'match') {
         openModal("Día de Partido", "Partido importante en el calendario de la liga.");
         addChoice("Saltar al campo", () => resolveMatch(false));
-
     } else if (node.type === 'final_match') {
         let currentFinal = gameState.finalsReached[gameState.currentFinalIndex];
         openModal(`¡GRAN FINAL DE ${currentFinal.toUpperCase()}!`, "Ha llegado el día más importante de la temporada. Todo o nada.");
         addChoice("Dar la vida en el campo", () => resolveMatch(true));
-
     } else if (node.type === 'season_summary') {
         openModal("Fin de Temporada", "La temporada ha concluido. Es hora de hacer balance de tu rendimiento anual.");
         addChoice("Ver Resumen de Temporada", () => resolveSeasonSummary());
@@ -438,12 +570,19 @@ function acceptOffer(teamObj) {
     gameState.team = teamObj.name;
     gameState.league = teamObj.league;
     gameState.seasonsAtCurrentClub = 0; 
+    
+    if (!gameState.transfersThisSeason) gameState.transfersThisSeason = [];
+    gameState.transfersThisSeason.push({ team: teamObj.name, fee: teamObj.fee });
 
     if (!gameState.teamsPlayed.includes(teamObj.name)) gameState.teamsPlayed.push(teamObj.name);
 
-    addLog(`Fichas por el ${teamObj.name}.`, "system");
+    addLog(`Fichas por el ${teamObj.name} (${formatMoney(teamObj.fee)}).`, "system");
+    
+    // AQUÍ ESTÁ LA MAGIA: Recalculamos las probabilidades con el nuevo club
+    recalculateFinals();
+
     let logoHtml = `<img src="${IMAGE_FOLDER}/${teamObj.id}${IMAGE_EXT}" alt="${teamObj.name}" style="height:100px; object-fit:contain;" onerror="this.style.display='none'">`;
-    showModalResult("Fichaje Cerrado", logoHtml, `Bienvenido a tu nuevo hogar: ${teamObj.name}.`, advanceNode);
+    showModalResult("Fichaje Cerrado", logoHtml, `Bienvenido a tu nuevo hogar: ${teamObj.name}.<br><br>Costo de tu traspaso: <strong style="color:var(--grass-green)">${formatMoney(teamObj.fee)}</strong>.`, advanceNode);
 }
 
 function stayAtClub() {
@@ -453,16 +592,21 @@ function stayAtClub() {
 
 function resolveTraining() {
     let mult = getInjuryMultiplier();
-    if (Math.random() < (0.08 * mult)) {
-        applyInjury("entrenamiento");
-        return; 
-    }
+    if (Math.random() < (0.04 * mult)) { applyInjury("entrenamiento"); return; } // Probabilidad rebajada al 4%
 
     let roll = Math.random();
     let gain = 0;
-    if (roll < 0.33) gain = 0;
-    else if (roll < 0.66) gain = 1;
-    else gain = 2;
+    let grl = gameState.rating;
+
+    if (grl >= 90) {
+        if(roll < 0.90) gain = 0; else gain = 0.5;
+    } else if (grl >= 85) {
+        if(roll < 0.60) gain = 0; else if(roll < 0.90) gain = 0.5; else gain = 1;
+    } else if (grl >= 75) {
+        if(roll < 0.33) gain = 0; else if(roll < 0.66) gain = 0.5; else gain = 1;
+    } else {
+        if(roll < 0.33) gain = 0; else if(roll < 0.66) gain = 1; else gain = 2;
+    }
     
     gameState.rating += gain;
     gameState.rating = Math.max(40, Math.min(99, gameState.rating));
@@ -471,11 +615,11 @@ function resolveTraining() {
     let dynamicHtml = `<div class="rating-up">+${gain} GRL</div>`;
     
     if (gain > 0) {
-        addLog(`Entrenamiento completado: GRL +${gain}. Nueva media: ${displayRating}.`, "system");
-        showModalResult("Entrenamiento Físico", dynamicHtml, "Las horas de gimnasio han dado sus frutos.", advanceNode);
+        addLog(`Entrenamiento: GRL +${gain}. Media: ${displayRating}.`, "system");
+        showModalResult("Entrenamiento", dynamicHtml, "Las horas de gimnasio han dado sus frutos.", advanceNode);
     } else {
-        addLog(`Entrenamiento completado pero sin mejora notable.`, "system");
-        showModalResult("Entrenamiento Físico", dynamicHtml, "Un entrenamiento flojo. No has logrado mejorar tu técnica hoy.", advanceNode);
+        addLog(`Entrenamiento de mantenimiento. Nivel intacto.`, "system");
+        showModalResult("Entrenamiento", dynamicHtml, grl >= 90 ? "En la élite ya no puedes mejorar más físicamente, solo mantener la forma." : "Un entrenamiento flojo. No has logrado mejorar hoy.", advanceNode);
     }
 }
 
@@ -486,51 +630,23 @@ function resolveRest() {
 
 function resolveRandomEvent() {
     let roll = Math.random() * 100;
-    let diff = 0;
-    let msg = "";
-    let title = "";
-    let htmlIcon = "";
+    let diff = 0; let msg = ""; let title = ""; let htmlIcon = "";
     
-    if (roll < 10) { // 10%: -5
-        diff = -5;
-        title = "¡Escándalo Nocturno!";
-        msg = "La prensa filtra unas fotos tuyas borracho perdido conduciendo de madrugada. El club y la afición te destrozan.";
-        htmlIcon = "🚓";
-    } else if (roll < 32) { // 22%: -2
-        diff = -2;
-        title = "Problemas Personales";
-        msg = "Tu pareja te ha dejado y estás pasando por un bache emocional muy duro. Tu rendimiento baja.";
-        htmlIcon = "💔";
-    } else if (roll < 68) { // 36%: +0
-        diff = 0;
-        title = "Tarde Tranquila";
-        msg = "Aprovechas el tiempo libre para estar en casa, jugar a videojuegos y desconectar de la presión del fútbol.";
-        htmlIcon = "🎮";
-    } else if (roll < 90) { // 22%: +2
-        diff = 2;
-        title = "Elogios del Míster";
-        msg = "El entrenador te nombra específicamente en la rueda de prensa destacando tu implicación. Tu confianza sube por las nubes.";
-        htmlIcon = "🎤";
-    } else { // 10%: +5
-        diff = 5;
-        title = "¡Jugador del Mes!";
-        msg = "La liga te entrega el trofeo a Mejor Jugador del Mes. Estás en tu prime absoluto y tu fama se dispara.";
-        htmlIcon = "🏅";
-    }
+    if (roll < 10) { diff = -5; title = "¡Escándalo Nocturno!"; msg = "La prensa filtra unas fotos tuyas borracho. El club te destroza."; htmlIcon = "🚓"; } 
+    else if (roll < 32) { diff = -2; title = "Problemas Personales"; msg = "Tu pareja te ha dejado y pasas por un bache emocional duro."; htmlIcon = "💔"; } 
+    else if (roll < 68) { diff = 0; title = "Tarde Tranquila"; msg = "Aprovechas el tiempo libre para estar en casa y jugar a videojuegos."; htmlIcon = "🎮"; } 
+    else if (roll < 90) { diff = 2; title = "Elogios del Míster"; msg = "El entrenador te elogia en rueda de prensa. Tu confianza sube."; htmlIcon = "🎤"; } 
+    else { diff = 5; title = "¡Jugador del Mes!"; msg = "La liga te entrega el trofeo a Mejor Jugador del Mes. Tu fama se dispara."; htmlIcon = "🏅"; }
     
     gameState.rating += diff;
     gameState.rating = Math.max(40, Math.min(99, gameState.rating));
-    
     let displayRating = Math.round(gameState.rating * 10) / 10;
     let sign = diff > 0 ? "+" : "";
     let classColor = diff > 0 ? "var(--grass-green)" : (diff < 0 ? "var(--danger-red)" : "var(--text-muted)");
     
     addLog(`Evento: ${title} (${sign}${diff} GRL). Nueva media: ${displayRating}`, diff < 0 ? "injury" : "system");
-    
     let descHtml = `${msg}<br><br><strong style="color:${classColor};">Repercusión: ${sign}${diff} GRL</strong>`;
-    let dynamicHtml = `<div style="font-size:4rem">${htmlIcon}</div>`;
-    
-    showModalResult(title, dynamicHtml, descHtml, advanceNode);
+    showModalResult(title, `<div style="font-size:4rem">${htmlIcon}</div>`, descHtml, advanceNode);
 }
 
 function buildMatchHtml(myGoals, rivGoals, myId, rivId, rivName) {
@@ -539,13 +655,11 @@ function buildMatchHtml(myGoals, rivGoals, myId, rivId, rivName) {
     return `
         <div class="match-result" style="display:flex; justify-content:space-between; align-items:center; width:100%; padding: 1rem;">
             <div style="display:flex; flex-direction:column; align-items:center; flex:1;">
-                ${myShieldHtml}
-                <span class="match-team" style="text-align:center;">${gameState.team}</span>
+                ${myShieldHtml}<span class="match-team" style="text-align:center;">${gameState.team}</span>
             </div>
             <span class="match-score" style="font-size:2.5rem; font-weight:bold; padding:0 15px;">${myGoals} - ${rivGoals}</span>
             <div style="display:flex; flex-direction:column; align-items:center; flex:1;">
-                ${rivalShieldHtml}
-                <span class="match-team" style="text-align:center;">${rivName}</span>
+                ${rivalShieldHtml}<span class="match-team" style="text-align:center;">${rivName}</span>
             </div>
         </div>
     `;
@@ -559,126 +673,76 @@ function startLiveMatch(myGoals, rivGoals, myId, rivId, rivName, isFinal, isInju
     DOM.liveTeam2Logo.innerHTML = getShieldHtml(rivId, "50px", false);
     DOM.liveTeam1Name.textContent = gameState.team;
     DOM.liveTeam2Name.textContent = rivName;
-    DOM.liveScore1.textContent = "0";
-    DOM.liveScore2.textContent = "0";
-    DOM.liveEvents.innerHTML = "";
-    DOM.btnSkipMatch.classList.remove('hidden');
+    DOM.liveScore1.textContent = "0"; DOM.liveScore2.textContent = "0";
+    DOM.liveEvents.innerHTML = ""; DOM.btnSkipMatch.classList.remove('hidden');
 
-    let oldBtn = document.getElementById('btn-live-continue');
-    if(oldBtn) oldBtn.remove();
-
+    let oldBtn = document.getElementById('btn-live-continue'); if(oldBtn) oldBtn.remove();
     let events = [];
     for(let i=0; i<myGoals; i++) events.push({ m: randomInt(2, 89), t: 'goal1', msg: `¡GOOOOOL del ${gameState.team}!` });
     for(let i=0; i<rivGoals; i++) events.push({ m: randomInt(2, 89), t: 'goal2', msg: `Gol del ${rivName}...` });
-    
-    if(isInjured) events.push({ m: randomInt(10, 80), t: 'inj', msg: `💥 Has sentido un pinchazo grave... Tienes que pedir el cambio.` });
-
-    for(let i=0; i<3; i++) events.push({ m: randomInt(5, 85), t: 'hl', msg: `Jugada de gran peligro que termina despejando la defensa.` });
-
+    if(isInjured) events.push({ m: randomInt(10, 80), t: 'inj', msg: `💥 Has sentido un pinchazo grave... Pides el cambio.` });
+    for(let i=0; i<3; i++) events.push({ m: randomInt(5, 85), t: 'hl', msg: `Jugada de peligro que despeja la defensa.` });
     events.sort((a,b) => a.m - b.m);
 
-    let minute = 0;
-    let s1 = 0; let s2 = 0;
-    let timer;
+    let minute = 0; let s1 = 0; let s2 = 0; let timer;
 
     function renderEvent(ev) {
-        let div = document.createElement('div');
-        div.className = 'live-event';
+        let div = document.createElement('div'); div.className = 'live-event';
         if(ev.t === 'goal1') { div.classList.add('goal'); s1++; DOM.liveScore1.textContent = s1; }
         if(ev.t === 'goal2') { div.classList.add('injury'); s2++; DOM.liveScore2.textContent = s2; div.style.color = "var(--danger-red)"; div.style.borderLeft="3px solid var(--danger-red)";}
         if(ev.t === 'inj') { div.classList.add('injury'); }
         if(ev.t === 'hl') { div.classList.add('highlight'); }
         if(ev.t === 'end') { div.classList.add('end'); }
-
         div.innerHTML = ev.t === 'end' ? ev.msg : `<strong>${ev.m}'</strong> - ${ev.msg}`;
-        DOM.liveEvents.appendChild(div);
-        DOM.liveEvents.scrollTop = DOM.liveEvents.scrollHeight;
+        DOM.liveEvents.appendChild(div); DOM.liveEvents.scrollTop = DOM.liveEvents.scrollHeight;
     }
 
     function finishSim() {
-        clearInterval(timer);
-        DOM.liveTime.textContent = "90'";
-        DOM.liveScore1.textContent = myGoals;
-        DOM.liveScore2.textContent = rivGoals;
-        DOM.btnSkipMatch.classList.add('hidden');
-
+        clearInterval(timer); DOM.liveTime.textContent = "90'"; DOM.liveScore1.textContent = myGoals; DOM.liveScore2.textContent = rivGoals; DOM.btnSkipMatch.classList.add('hidden');
         while(events.length > 0) renderEvent(events.shift());
         renderEvent({t: 'end', msg: '¡FINAL DEL PARTIDO!'});
-
-        let btn = document.createElement('button');
-        btn.id = 'btn-live-continue';
-        btn.className = 'choice-btn action-btn';
-        btn.textContent = "Ir a Rueda de Prensa";
+        let btn = document.createElement('button'); btn.id = 'btn-live-continue'; btn.className = 'choice-btn action-btn'; btn.textContent = "Ir a Rueda de Prensa";
         btn.onclick = () => {
-            DOM.liveMatchModal.classList.add('hidden');
-            btn.remove();
+            DOM.liveMatchModal.classList.add('hidden'); btn.remove();
             let titleText = isFinal ? `Fin del Partido (${currentFinalName})` : "Pitido Final";
             showModalResult(titleText, buildMatchHtml(myGoals, rivGoals, myId, rivId, rivName), finalDesc, nextAction);
         };
         DOM.liveChoices.appendChild(btn);
     }
-
     DOM.btnSkipMatch.onclick = finishSim;
-
     timer = setInterval(() => {
-        minute++;
-        DOM.liveTime.textContent = minute + "'";
+        minute++; DOM.liveTime.textContent = minute + "'";
         while(events.length > 0 && events[0].m === minute) renderEvent(events.shift());
         if(minute >= 90) finishSim();
     }, 50);
 }
 
 function resolveMatch(isFinal) {
-    gameState.matches++;
-    gameState.matchesThisSeason++;
-    
-    let g = 0; let a = 0;
-    let r = Math.random();
-    let grlBonus = (gameState.rating - 60) / 100;
+    gameState.matches++; gameState.matchesThisSeason++;
+    let g = 0; let a = 0; let r = Math.random(); let grlBonus = (gameState.rating - 60) / 100;
 
     switch(gameState.playerPosition) {
-        case "DC":
-            if(r < 0.35 + grlBonus) g = 1; else if (r < 0.5 + grlBonus) g = 2; else if (r < 0.55 + grlBonus) g = 3;
-            if(Math.random() < 0.2 + grlBonus) a = 1; break;
-        case "EXT":
-            if(r < 0.25 + grlBonus) g = 1; else if (r < 0.3 + grlBonus) g = 2;
-            if(Math.random() < 0.35 + grlBonus) a = 1; else if (Math.random() < 0.45 + grlBonus) a = 2; break;
-        case "MC":
-            if(r < 0.15 + grlBonus) g = 1;
-            if(Math.random() < 0.4 + grlBonus) a = 1; else if (Math.random() < 0.5 + grlBonus) a = 2; break;
-        case "DEF":
-            if(r < 0.05 + grlBonus) g = 1; 
-            if(Math.random() < 0.1 + grlBonus) a = 1; break;
+        case "DC": if(r < 0.35 + grlBonus) g = 1; else if (r < 0.5 + grlBonus) g = 2; else if (r < 0.55 + grlBonus) g = 3; if(Math.random() < 0.2 + grlBonus) a = 1; break;
+        case "EXT": if(r < 0.25 + grlBonus) g = 1; else if (r < 0.3 + grlBonus) g = 2; if(Math.random() < 0.35 + grlBonus) a = 1; else if (Math.random() < 0.45 + grlBonus) a = 2; break;
+        case "MC": if(r < 0.15 + grlBonus) g = 1; if(Math.random() < 0.4 + grlBonus) a = 1; else if (Math.random() < 0.5 + grlBonus) a = 2; break;
+        case "DEF": if(r < 0.05 + grlBonus) g = 1; if(Math.random() < 0.1 + grlBonus) a = 1; break;
     }
     
-    gameState.goals += g;
-    gameState.assists += a;
-    gameState.goalsThisSeason += g;
-    gameState.assistsThisSeason += a;
+    gameState.goals += g; gameState.assists += a; gameState.goalsThisSeason += g; gameState.assistsThisSeason += a;
 
     let myTeamInfo = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.find(t => t.name === gameState.team) : null;
-    let myTier = getEffectiveTier(gameState.team);
-    let myTeamId = myTeamInfo ? myTeamInfo.id : "default";
+    let myTier = getEffectiveTier(gameState.team); let myTeamId = myTeamInfo ? myTeamInfo.id : "default";
 
-    let rivalInfo = null;
-    let rivalName = "Rival";
-    let rivalTier = 4;
-    let rivalId = "default";
-    
-    let currentFinalName = null;
+    let rivalInfo = null; let rivalName = "Rival"; let rivalTier = 4; let rivalId = "default"; let currentFinalName = null;
 
     if (isFinal) {
         currentFinalName = gameState.finalsReached[gameState.currentFinalIndex];
         let isEurope = ["Champions League", "Europa League", "Conference League"].includes(currentFinalName);
         let possibleRivals = [];
-        
-        if (isEurope) {
-            possibleRivals = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.filter(t => t.europeanCompetition !== null && getEffectiveTier(t.name) <= 2 && t.name !== gameState.team) : [];
-        } else {
+        if (isEurope) possibleRivals = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.filter(t => t.europeanCompetition !== null && getEffectiveTier(t.name) <= 2 && t.name !== gameState.team) : [];
+        else {
             possibleRivals = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.filter(t => t.league === gameState.league && getEffectiveTier(t.name) <= 2 && t.name !== gameState.team) : [];
-            if (possibleRivals.length === 0) {
-                possibleRivals = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.filter(t => t.league === gameState.league && t.name !== gameState.team) : [];
-            }
+            if (possibleRivals.length === 0) possibleRivals = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.filter(t => t.league === gameState.league && t.name !== gameState.team) : [];
         }
         if (possibleRivals.length > 0) rivalInfo = possibleRivals[Math.floor(Math.random() * possibleRivals.length)];
     } else {
@@ -686,92 +750,84 @@ function resolveMatch(isFinal) {
         if (rivals.length > 0) rivalInfo = rivals[Math.floor(Math.random() * rivals.length)];
     }
 
-    if (rivalInfo) {
-        rivalName = rivalInfo.name;
-        rivalTier = getEffectiveTier(rivalName);
-        rivalId = rivalInfo.id;
-    }
-
-    let myTeamGoalsBase = g + Math.floor(Math.random() * 2); 
-    let rivalGoalsBase = Math.floor(Math.random() * 2);
-    let tierDiff = rivalTier - myTier; 
-
-    if (tierDiff > 0) myTeamGoalsBase += Math.floor(Math.random() * (tierDiff + 1));
-    else if (tierDiff < 0) rivalGoalsBase += Math.floor(Math.random() * (Math.abs(tierDiff) * 2));
+    if (rivalInfo) { rivalName = rivalInfo.name; rivalTier = getEffectiveTier(rivalName); rivalId = rivalInfo.id; }
 
     let myTeamGoals = Math.max(g, myTeamGoalsBase); 
     let rivalGoals = Math.max(0, rivalGoalsBase);
+    let matchResult = "draw"; 
     
-    let matchResult = "draw";
-    if (myTeamGoals > rivalGoals) matchResult = "win";
+    if (myTeamGoals > rivalGoals) matchResult = "win"; 
     else if (myTeamGoals < rivalGoals) matchResult = "loss";
-
+    
     let desc = `Has marcado ${g} gol(es) y dado ${a} asistencia(s).`;
 
     if (isFinal) {
-        if (myTeamGoals > rivalGoals || (myTeamGoals === rivalGoals && Math.random() > 0.5)) {
+        if (myTeamGoals > rivalGoals) {
             matchResult = "win";
-            if (myTeamGoals === rivalGoals) desc += " ¡Victoria épica en los penaltis!";
             gameState.trophies++;
-            desc += ` ¡CAMPEONES DE ${currentFinalName.toUpperCase()}!`;
+            if (!gameState.titlesList) gameState.titlesList = [];
+            gameState.titlesList.push(`${currentFinalName} (${gameState.team})`);
+            gameState.titlesThisSeason = (gameState.titlesThisSeason || 0) + 1;
+            desc += ` ¡CAMPEONES DE ${currentFinalName.toUpperCase()}!`; 
             addLog(`¡LEVANTAS EL TÍTULO DE ${currentFinalName.toUpperCase()}!`, "system");
-        } else {
+        } else if (myTeamGoals < rivalGoals) {
             matchResult = "loss";
-            if (myTeamGoals === rivalGoals) {
-                rivalGoals++; 
-                desc += ` Derrota en los penaltis contra el ${rivalName}. El fútbol ha sido cruel hoy.`;
-            } else {
-                desc += ` El ${rivalName} fue superior. Perdisteis la final.`;
-            }
+            desc += ` El ${rivalName} fue superior. Perdisteis la final.`;
             addLog(`Derrota dolorosa en la final de ${currentFinalName}.`);
+        } else {
+            // EMPATE EN LOS 90 MINUTOS - TANDA DE PENALTIS (50/50 REAL)
+            if (Math.random() < 0.5) {
+                matchResult = "win";
+                desc += " ¡Victoria épica en los penaltis!";
+                gameState.trophies++;
+                if (!gameState.titlesList) gameState.titlesList = [];
+                gameState.titlesList.push(`${currentFinalName} (${gameState.team})`);
+                gameState.titlesThisSeason = (gameState.titlesThisSeason || 0) + 1;
+                desc += ` ¡CAMPEONES DE ${currentFinalName.toUpperCase()}!`; 
+                addLog(`¡LEVANTAS EL TÍTULO DE ${currentFinalName.toUpperCase()} EN PENALTIS!`, "system");
+            } else {
+                matchResult = "loss";
+                // YA NO sumamos un gol falso al rival. El marcador se queda en empate.
+                desc += ` Derrota en la tanda de penaltis contra el ${rivalName}. El fútbol ha sido cruel hoy.`;
+                addLog(`Derrota dolorosa en los penaltis de ${currentFinalName}.`);
+            }
         }
     }
-
     let ratingChange = 0;
-    if (myTier === 4) {
-        if (matchResult === "win") ratingChange = 3; else if (matchResult === "draw") ratingChange = 1.5; else if (matchResult === "loss") ratingChange = 0;
-    } else if (myTier === 3) {
-        if (matchResult === "win") ratingChange = 2.5; else if (matchResult === "draw") ratingChange = 1; else if (matchResult === "loss") ratingChange = 0;
-    } else if (myTier === 2) {
-        if (matchResult === "win") ratingChange = 2; else if (matchResult === "draw") ratingChange = 0.5; else if (matchResult === "loss") ratingChange = -1;
-    } else if (myTier === 1) {
-        if (matchResult === "win") ratingChange = 1; else if (matchResult === "draw") ratingChange = 0; else if (matchResult === "loss") ratingChange = -2;
+    
+    if (gameState.rating >= 90) {
+        if (matchResult === "win") ratingChange = 0; 
+        else if (matchResult === "draw") ratingChange = -1; 
+        else if (matchResult === "loss") ratingChange = -3;
+    } else {
+        if (myTier === 4) { if (matchResult === "win") ratingChange = 3; else if (matchResult === "draw") ratingChange = 1.5; else if (matchResult === "loss") ratingChange = 0; } 
+        else if (myTier === 3) { if (matchResult === "win") ratingChange = 2.5; else if (matchResult === "draw") ratingChange = 1; else if (matchResult === "loss") ratingChange = 0; } 
+        else if (myTier === 2) { if (matchResult === "win") ratingChange = 2; else if (matchResult === "draw") ratingChange = 0.5; else if (matchResult === "loss") ratingChange = -1; } 
+        else if (myTier === 1) { if (matchResult === "win") ratingChange = 1; else if (matchResult === "draw") ratingChange = 0; else if (matchResult === "loss") ratingChange = -2; }
     }
 
-    gameState.rating += ratingChange;
-    gameState.rating = Math.max(40, Math.min(99, gameState.rating));
-    
-    let sign = ratingChange > 0 ? "+" : "";
-    let ratingText = ratingChange !== 0 ? ` (Prensa: ${sign}${ratingChange} GRL)` : ` (Prensa: Invariable)`;
-    
+    gameState.rating += ratingChange; gameState.rating = Math.max(40, Math.min(99, gameState.rating));
+    let sign = ratingChange > 0 ? "+" : ""; let ratingText = ratingChange !== 0 ? ` (Prensa: ${sign}${ratingChange} GRL)` : ` (Prensa: Invariable)`;
     addLog(`Partido contra ${rivalName} (${myTeamGoals}-${rivalGoals}). G: ${g}, A: ${a}.${ratingText}`);
     desc += `<br><br><strong style="color:var(--action-blue);">Repercusión en prensa: ${sign}${ratingChange} GRL</strong>`;
 
     let mult = getInjuryMultiplier();
-    let isInjured = Math.random() < (0.15 * mult);
+    let isInjured = Math.random() < (0.07 * mult); // Probabilidad de lesión rebajada al 7%
     
     let nextAction;
     if (isFinal && gameState.currentFinalIndex < gameState.finalsReached.length - 1) {
         nextAction = () => {
             gameState.currentFinalIndex++;
-            if (isInjured) {
-                applyInjury("partido"); 
-            } else {
-                openActionPanel({ id: gameState.currentNodeId, type: 'final_match' });
-            }
+            if (isInjured) applyInjury("partido"); 
+            else openActionPanel({ id: gameState.currentNodeId, type: 'final_match' });
         };
     } else {
         nextAction = isInjured ? () => applyInjury("partido") : advanceNode;
     }
 
     let doSim = gameState.simMode === 2 || (gameState.simMode === 1 && isFinal);
-
-    if (doSim) {
-        startLiveMatch(myTeamGoals, rivalGoals, myTeamId, rivalId, rivalName, isFinal, isInjured, desc, nextAction, currentFinalName);
-    } else {
-        let titleText = isFinal ? `Fin del Partido (${currentFinalName})` : "Pitido Final";
-        showModalResult(titleText, buildMatchHtml(myTeamGoals, rivalGoals, myTeamId, rivalId, rivalName), desc, nextAction);
-    }
+    if (doSim) startLiveMatch(myTeamGoals, rivalGoals, myTeamId, rivalId, rivalName, isFinal, isInjured, desc, nextAction, currentFinalName);
+    else { let titleText = isFinal ? `Fin del Partido (${currentFinalName})` : "Pitido Final"; showModalResult(titleText, buildMatchHtml(myTeamGoals, rivalGoals, myTeamId, rivalId, rivalName), desc, nextAction); }
 }
 
 function resolveSeasonSummary() {
@@ -779,9 +835,7 @@ function resolveSeasonSummary() {
     let summaryHtml = "";
     
     if (simulatedMatches > 0 && gameState.team !== "Agente Libre") {
-        let grl = gameState.rating;
-        let expectedG = 0, expectedA = 0;
-        
+        let grl = gameState.rating; let expectedG = 0, expectedA = 0;
         if (grl < 65) { expectedG = randomInt(0, 5); expectedA = randomInt(0, 3); }
         else if (grl <= 74) { expectedG = randomInt(3, 12); expectedA = randomInt(1, 6); }
         else if (grl <= 84) { expectedG = randomInt(8, 25); expectedA = randomInt(3, 12); }
@@ -792,41 +846,84 @@ function resolveSeasonSummary() {
         else if (pos === "MC") { expectedG = Math.floor(expectedG * 0.4); expectedA = Math.floor(expectedA * 1.5); }
         else if (pos === "EXT") { expectedG = Math.floor(expectedG * 0.7); expectedA = Math.floor(expectedA * 1.2); }
         
-        let extraG = Math.max(0, expectedG - gameState.goalsThisSeason);
-        let extraA = Math.max(0, expectedA - gameState.assistsThisSeason);
+        let extraG = Math.max(0, expectedG - gameState.goalsThisSeason); let extraA = Math.max(0, expectedA - gameState.assistsThisSeason);
 
-        gameState.goals += extraG;
-        gameState.assists += extraA;
-        gameState.goalsThisSeason += extraG;
-        gameState.assistsThisSeason += extraA;
-        gameState.matches += simulatedMatches;
+        gameState.goals += extraG; gameState.assists += extraA; gameState.goalsThisSeason += extraG; gameState.assistsThisSeason += extraA; gameState.matches += simulatedMatches;
 
-        let rChange = Math.random();
-        let diff = 0;
-        let changeType = "";
-
-        if (rChange < 0.70) {
-            diff = randomInt(-1, 2);
-            changeType = "Nivel mantenido";
-        } else if (rChange < 0.95) {
-            if ((gameState.goalsThisSeason + gameState.assistsThisSeason) >= (expectedG + expectedA) * 0.7) {
-                diff = randomInt(1, 4);
-                changeType = "Buena temporada";
-            } else {
-                diff = randomInt(-3, -1);
-                changeType = "Mala temporada";
-            }
-        } else {
-            diff = randomInt(3, 6);
-            changeType = "¡Sorpresa Élite!";
-        }
+        let rChange = Math.random(); let diff = 0; let changeType = "";
         
-        gameState.rating += diff;
-        gameState.rating = Math.max(40, Math.min(99, gameState.rating));
+        if (rChange < 0.70) { diff = randomInt(-1, 1); changeType = "Nivel mantenido"; } 
+        else if (rChange < 0.95) { 
+            if ((gameState.goalsThisSeason + gameState.assistsThisSeason) >= (expectedG + expectedA) * 0.7) { 
+                diff = randomInt(1, 3); changeType = "Buena temporada"; 
+            } else { 
+                diff = randomInt(-2, -1); changeType = "Mala temporada"; 
+            } 
+        } 
+        else { diff = randomInt(2, 4); changeType = "¡Sorpresa Élite!"; }
+        
+        if (gameState.rating >= 90) {
+            let wonTitle = gameState.titlesThisSeason > 0;
+            let eliteStats = (gameState.goalsThisSeason + gameState.assistsThisSeason) >= 35;
+            if (!wonTitle || !eliteStats) {
+                diff -= 3;
+                changeType += " | Fracaso en la Élite (-3)";
+            } else {
+                diff += 1;
+                changeType += " | Éxito en la Élite (+1)";
+            }
+        }
+
+        if (gameState.rating > gameState.potential) {
+            diff -= 2;
+            changeType += ` | Techo de potencial`;
+        }
+
+        let ageDecline = 0;
+        if (gameState.age >= 34) ageDecline = 4;
+        else if (gameState.age >= 31) ageDecline = 2;
+        else if (gameState.age >= 29) ageDecline = 1;
+
+        if (ageDecline > 0) {
+            diff -= ageDecline;
+            changeType += ` | Declive físico (-${ageDecline})`;
+        }
+
+        gameState.rating += diff; gameState.rating = Math.max(40, Math.min(99, gameState.rating));
         let sign = diff > 0 ? "+" : "";
 
         addLog(`--- Temp. ${gameState.season} | ${gameState.goalsThisSeason} Goles | ${gameState.assistsThisSeason} Asis. ---`, "system");
         addLog(`Evolución de fin de año: ${sign}${diff} GRL.`, "system");
+
+        let awardsMsg = "";
+        if (gameState.goalsThisSeason >= 30) {
+            let chance = (gameState.goalsThisSeason - 25) * 5; 
+            if (Math.random() * 100 < chance) {
+                gameState.goldenBoots = (gameState.goldenBoots || 0) + 1;
+                awardsMsg += "<br><br>👟 <strong style='color:var(--gold-star)'>¡BOTA DE ORO!</strong> Eres el máximo goleador del mundo esta temporada.";
+                addLog("👟 ¡Ganas la Bota de Oro por tus goles!", "system");
+            }
+        }
+
+        // Añadimos la condición obligatoria de tener al menos 1 título ganado
+        if (getEffectiveTier(gameState.team) <= 2 && gameState.rating >= 85 && (gameState.goalsThisSeason + gameState.assistsThisSeason) >= 40 && gameState.titlesThisSeason > 0) {
+            // Calculamos la probabilidad (el bonus de +25 ya viene implícito porque siempre tendrás al menos 1 título)
+            let bChance = (gameState.rating - 80) * 2 + (gameState.goalsThisSeason) * 1.5 + 25;
+            if (Math.random() * 100 < bChance) {
+                gameState.ballonsDor = (gameState.ballonsDor || 0) + 1;
+                awardsMsg += "<br><br>🌕 <strong style='color:var(--gold-star)'>¡BALÓN DE ORO!</strong> El mundo se rinde a tus pies. Eres el mejor jugador del planeta.";
+                addLog("🌕 ¡HAS GANADO EL BALÓN DE ORO!", "system");
+            }
+        }
+
+        let transferMsg = "";
+        if (gameState.transfersThisSeason && gameState.transfersThisSeason.length > 0) {
+            transferMsg = `<br><hr style="border-color: var(--border-color); margin: 15px 0;">
+            <p style="color: var(--gold-star); font-size: 1.1rem; text-align:center;"><strong>Movimientos de Mercado</strong></p>`;
+            gameState.transfersThisSeason.forEach(t => {
+                transferMsg += `<p style="text-align:center;">➔ Traspaso al <strong>${t.team}</strong>: <span style="color:var(--grass-green)">${formatMoney(t.fee)}</span></p>`;
+            });
+        }
 
         summaryHtml = `
             <div style="text-align: left; font-size: 1.1rem; color: var(--text-light); line-height: 1.6; width: 100%;">
@@ -838,48 +935,53 @@ function resolveSeasonSummary() {
                     <strong>Evolución de Fin de Año: ${sign}${diff} GRL</strong> <br> 
                     <span style="font-size:0.9rem; color:var(--text-muted)">(${changeType})</span>
                 </p>
+                ${awardsMsg}
+                ${transferMsg}
             </div>
         `;
-    } else {
-        summaryHtml = `<div style="font-size:1.2rem; color:var(--text-muted)">Sin minutos esta temporada.</div>`;
-    }
+    } else { summaryHtml = `<div style="font-size:1.2rem; color:var(--text-muted)">Sin minutos esta temporada.</div>`; }
 
     showModalResult("Fin de la Temporada", summaryHtml, "Aquí tienes el balance de tu año.", endSeason);
 }
 
-function advanceNode() {
-    DOM.modalOverlay.classList.add('hidden');
-    gameState.currentTier++;
-    saveState();
-    updateUI();
-    renderTree();
-}
+function advanceNode() { DOM.modalOverlay.classList.add('hidden'); gameState.currentTier++; saveState(); updateUI(); renderTree(); }
 
 function endSeason() {
     DOM.modalOverlay.classList.add('hidden');
-    gameState.season++;
-    gameState.age++;
+    gameState.season++; gameState.age++;
     
+    // Retirada obligatoria sí o sí a los 45 (si lograste sobrevivir)
     if (gameState.age >= 45) {
         addLog("Has cumplido 45 años. Por reglamento médico y físico, te ves obligado a retirarte.", "system");
-        setTimeout(() => {
-            alert("¡Has cumplido 45 años! Tu cuerpo ya no aguanta el ritmo profesional. Es hora de colgar las botas y pasar a la historia.");
-            retirePlayer();
-        }, 500);
+        setTimeout(() => { alert("¡Has cumplido 45 años! Tu cuerpo ya no aguanta el ritmo profesional. Es hora de colgar las botas y pasar a la historia."); retirePlayer(); }, 500);
         return;
+    }
+
+    // NUEVO: Riesgo de retiro exponencial a partir de los 35 años
+    if (gameState.age >= 35) {
+        // Fórmula exponencial que empieza en 20% a los 35 y sube a 90% a los 40
+        let retirementChance = 0.20 * Math.exp(0.3008 * (gameState.age - 35));
+        
+        if (Math.random() < retirementChance) {
+            let percentLog = Math.min(99, Math.round(retirementChance * 100));
+            addLog(`Tu cuerpo no aguanta más el ritmo (Riesgo: ${percentLog}%). Te retiras por problemas físicos.`, "injury");
+            
+            setTimeout(() => { 
+                alert(`¡TU CUERPO HA DICHO BASTA!\n\nA tus ${gameState.age} años, el desgaste físico acumulado y los continuos problemas médicos te obligan a retirarte de forma prematura.\n\nEs hora de colgar las botas.`); 
+                retirePlayer(); 
+            }, 500);
+            
+            return; // Corta la función para que no avance la temporada
+        }
     }
 
     if (gameState.team !== "Agente Libre") {
         gameState.seasonsAtCurrentClub = (gameState.seasonsAtCurrentClub || 0) + 1;
-        
         if (gameState.seasonsAtCurrentClub >= 3) {
             if (!gameState.upgradedClubs) gameState.upgradedClubs = {};
             let currentTier = getEffectiveTier(gameState.team);
-            
             if (currentTier > 1) { 
-                gameState.upgradedClubs[gameState.team] = (gameState.upgradedClubs[gameState.team] || 0) + 1;
-                let newTier = currentTier - 1;
-                
+                gameState.upgradedClubs[gameState.team] = (gameState.upgradedClubs[gameState.team] || 0) + 1; let newTier = currentTier - 1;
                 addLog(`🌟 ¡LEYENDA DEL CLUB! Llevas 3 años aquí y el ${gameState.team} sube de categoría a Tier ${newTier}.`, "system");
                 alert(`🌟 ¡LEALTAD PREMIADA!\n\nGracias a tu rendimiento liderando el proyecto durante 3 temporadas, el ${gameState.team} ha crecido como club.\n\n¡A partir de ahora son considerados un equipo de Tier ${newTier}!`);
             }
@@ -887,35 +989,29 @@ function endSeason() {
         }
     }
 
-    gameState.matchesThisSeason = 0;
-    gameState.goalsThisSeason = 0;
-    gameState.assistsThisSeason = 0;
+    gameState.matchesThisSeason = 0; gameState.goalsThisSeason = 0; gameState.assistsThisSeason = 0;
+    
+    gameState.titlesThisSeason = 0;
+    gameState.transfersThisSeason = [];
+    gameState.visitedNodes = [];
 
-    generateDiamondTree();
-    saveState();
-    updateUI();
-    renderTree();
+    generateDiamondTree(); saveState(); updateUI(); renderTree();
 }
-
-// --- FUNCIÓN PARA EVENTOS ALEATORIOS ---
-// --- FUNCIÓN PARA EVENTOS ALEATORIOS ---
 function getRandomEventType() {
     let r = Math.random() * 100;
-    if (r < 40) return 'match';         // 40% Partido
-    if (r < 80) return 'training';      // 40% Entrenamiento (40+40=80)
-    if (r < 90) return 'rest';          // 10% Descanso (80+10=90)
-    return 'random';                    // 10% Evento aleatorio (hasta 100)
+    if (r < 40) return 'match';
+    if (r < 80) return 'training';
+    if (r < 90) return 'rest';
+    return 'random';
 }
-
-// --- GENERACIÓN DEL MAPA ---
-function generateDiamondTree() {
-    gameState.currentTier = 0;
+// --- NUEVO: REEVALUAR FINALES AL CAMBIAR DE EQUIPO ---
+function recalculateFinals() {
     gameState.finalsReached = [];
     gameState.currentFinalIndex = 0;
-    
+
     let myTeamInfo = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.find(t => t.name === gameState.team) : null;
     let myTier = getEffectiveTier(gameState.team);
-    
+
     let pCup = 0, pLeague = 0, pEurope = 0;
     if (myTier === 4) { pCup = 10; pLeague = 1; }
     else if (myTier === 3) { pCup = 20; pLeague = 5; }
@@ -923,179 +1019,125 @@ function generateDiamondTree() {
     else if (myTier === 1) { pCup = 40; pLeague = 70; pEurope = 40; }
 
     let myEuro = myTeamInfo ? myTeamInfo.europeanCompetition : null;
-    if (myTier <= 2 && !myEuro) {
-        myEuro = myTier === 1 ? "Champions League" : "Europa League";
-    }
+    if (myTier <= 2 && !myEuro) myEuro = myTier === 1 ? "Champions League" : "Europa League";
 
-    let wonLeague = Math.random() * 100 < pLeague;
-    let wonCup = Math.random() * 100 < pCup;
-    let wonEuro = myEuro && (Math.random() * 100 < pEurope);
-
-    if (wonLeague) gameState.finalsReached.push("Liga");
-    if (wonCup) gameState.finalsReached.push("Copa");
-    if (wonEuro) gameState.finalsReached.push(myEuro);
+    if (Math.random() * 100 < pLeague) gameState.finalsReached.push("Liga");
+    if (Math.random() * 100 < pCup) gameState.finalsReached.push("Copa");
+    if (myEuro && (Math.random() * 100 < pEurope)) gameState.finalsReached.push(myEuro);
 
     let hasFinals = gameState.finalsReached.length > 0;
 
-    // AHORA EL ÁRBOL ES 100% ALEATORIO EXCEPTO LOS TRAMOS OBLIGATORIOS
-    let t1 = [getRandomEventType(), getRandomEventType()];
-    let t2 = [getRandomEventType(), getRandomEventType(), getRandomEventType()];
-    // El tramo 3 mantiene su Mercado de Invierno obligatorio en el medio
-    let t3 = [getRandomEventType(), 'transfer', getRandomEventType(), getRandomEventType()];
-    let t4 = [getRandomEventType(), getRandomEventType(), getRandomEventType()];
-    
-    let t5 = hasFinals ? ['final_match', 'final_match'] : [getRandomEventType(), getRandomEventType()];
-
-    const layout = [
-        ['transfer'],                                       
-        t1,                              
-        t2,                     
-        t3,      
-        t4,                     
-        t5,                           
-        ['season_summary']                                
-    ];
-
-    let tree = [];
-    layout.forEach((row, rIndex) => {
-        let tierNodes = [];
-        row.forEach((type, cIndex) => {
-            tierNodes.push({ id: `t${rIndex}_n${cIndex}`, tier: rIndex, type: type, children: getChildrenIds(rIndex, cIndex, layout) });
+    // Modificamos el Tier 5 (la semana de las finales) en el árbol al vuelo
+    if (gameState.seasonTree && gameState.seasonTree[5]) {
+        gameState.seasonTree[5].forEach(node => {
+            // Solo cambiamos los nodos si aún no hemos llegado a esa semana
+            if (gameState.currentTier < 5) {
+                node.type = hasFinals ? 'final_match' : getRandomEventType();
+            }
         });
-        tree.push(tierNodes);
-    });
+    }
+}
+function generateDiamondTree() {
+    gameState.currentTier = 0; gameState.finalsReached = []; gameState.currentFinalIndex = 0;
+    if (!gameState.visitedNodes) gameState.visitedNodes = [];
+
+    let myTeamInfo = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.find(t => t.name === gameState.team) : null;
+    let myTier = getEffectiveTier(gameState.team);
     
-    gameState.seasonTree = tree;
-    gameState.currentNodeId = tree[0][0].id; 
+    let pCup = 0, pLeague = 0, pEurope = 0;
+    if (myTier === 4) { pCup = 10; pLeague = 1; } else if (myTier === 3) { pCup = 20; pLeague = 5; } else if (myTier === 2) { pCup = 35; pLeague = 10; pEurope = 35; } else if (myTier === 1) { pCup = 40; pLeague = 70; pEurope = 40; }
+
+    let myEuro = myTeamInfo ? myTeamInfo.europeanCompetition : null;
+    if (myTier <= 2 && !myEuro) myEuro = myTier === 1 ? "Champions League" : "Europa League";
+
+    if (Math.random() * 100 < pLeague) gameState.finalsReached.push("Liga");
+    if (Math.random() * 100 < pCup) gameState.finalsReached.push("Copa");
+    if (myEuro && (Math.random() * 100 < pEurope)) gameState.finalsReached.push(myEuro);
+
+    let hasFinals = gameState.finalsReached.length > 0;
+    let t1 = [getRandomEventType(), getRandomEventType()]; let t2 = [getRandomEventType(), getRandomEventType(), getRandomEventType()]; let t3 = [getRandomEventType(), 'transfer', getRandomEventType(), getRandomEventType()]; let t4 = [getRandomEventType(), getRandomEventType(), getRandomEventType()]; let t5 = hasFinals ? ['final_match', 'final_match'] : [getRandomEventType(), getRandomEventType()];
+
+    const layout = [ ['transfer'], t1, t2, t3, t4, t5, ['season_summary'] ];
+    let tree = [];
+    layout.forEach((row, rIndex) => { let tierNodes = []; row.forEach((type, cIndex) => { tierNodes.push({ id: `t${rIndex}_n${cIndex}`, tier: rIndex, type: type, children: getChildrenIds(rIndex, cIndex, layout) }); }); tree.push(tierNodes); });
+    
+    gameState.seasonTree = tree; gameState.currentNodeId = tree[0][0].id; 
 }
 
 function getChildrenIds(r, c, layout) {
-    if (r >= layout.length - 1) return [];
-    let children = [];
-    let nextRowLen = layout[r+1].length;
-    let currRowLen = layout[r].length;
-
-    if (nextRowLen > currRowLen) { children.push(`t${r+1}_n${c}`); children.push(`t${r+1}_n${c+1}`); }
-    else if (nextRowLen < currRowLen) { if (c > 0) children.push(`t${r+1}_n${c-1}`); if (c < nextRowLen) children.push(`t${r+1}_n${c}`); }
-    else { children.push(`t${r+1}_n${c}`); }
+    if (r >= layout.length - 1) return []; let children = []; let nextRowLen = layout[r+1].length; let currRowLen = layout[r].length;
+    if (nextRowLen > currRowLen) { children.push(`t${r+1}_n${c}`); children.push(`t${r+1}_n${c+1}`); } else if (nextRowLen < currRowLen) { if (c > 0) children.push(`t${r+1}_n${c-1}`); if (c < nextRowLen) children.push(`t${r+1}_n${c}`); } else { children.push(`t${r+1}_n${c}`); }
     return [...new Set(children)];
 }
 
 function renderTree() {
     DOM.nodesWrapper.innerHTML = '';
-    
     gameState.seasonTree.forEach((tier) => {
-        const rowDiv = document.createElement('div');
-        rowDiv.className = 'tier-row';
-        
+        const rowDiv = document.createElement('div'); rowDiv.className = 'tier-row';
         tier.forEach(node => {
-            const nodeEl = document.createElement('div');
-            nodeEl.className = 'event-node';
-            nodeEl.id = node.id;
-            nodeEl.innerHTML = EVENT_ICONS[node.type];
-            
-            // Asignación de nombres de eventos a las etiquetas
+            const nodeEl = document.createElement('div'); nodeEl.className = 'event-node'; nodeEl.id = node.id; nodeEl.innerHTML = EVENT_ICONS[node.type];
             let titleText = 'Evento';
-            if (node.type === 'transfer') titleText = 'Mercado';
-            else if (node.type === 'match') titleText = 'Partido';
-            else if (node.type === 'training') titleText = 'Entrenamiento';
-            else if (node.type === 'rest') titleText = 'Descanso';
-            else if (node.type === 'random') titleText = 'Sorpresa';
-            else if (node.type === 'season_summary') titleText = 'Resumen';
-            else if (node.type === 'final_match') titleText = 'Final';
-
+            if (node.type === 'transfer') titleText = 'Mercado'; else if (node.type === 'match') titleText = 'Partido'; else if (node.type === 'training') titleText = 'Entrenamiento'; else if (node.type === 'rest') titleText = 'Descanso'; else if (node.type === 'random') titleText = 'Sorpresa'; else if (node.type === 'season_summary') titleText = 'Resumen'; else if (node.type === 'final_match') titleText = 'Final';
             nodeEl.setAttribute('data-title', titleText);
             
             if (node.type === 'final_match') {
-                nodeEl.style.borderColor = "var(--danger-red)";
-                nodeEl.style.boxShadow = "0 0 15px rgba(239,68,68,0.5)";
-                
-                const finalLabel = document.createElement('div');
-                finalLabel.textContent = "FINAL";
-                finalLabel.style.position = "absolute";
-                finalLabel.style.top = "-22px";
-                finalLabel.style.backgroundColor = "var(--danger-red)";
-                finalLabel.style.color = "white";
-                finalLabel.style.padding = "2px 8px";
-                finalLabel.style.borderRadius = "4px";
-                finalLabel.style.fontSize = "0.75rem";
-                finalLabel.style.fontWeight = "bold";
-                finalLabel.style.letterSpacing = "1px";
-                nodeEl.appendChild(finalLabel);
+                nodeEl.style.borderColor = "var(--danger-red)"; nodeEl.style.boxShadow = "0 0 15px rgba(239,68,68,0.5)";
+                const finalLabel = document.createElement('div'); finalLabel.textContent = "FINAL"; finalLabel.style.position = "absolute"; finalLabel.style.top = "-22px"; finalLabel.style.backgroundColor = "var(--danger-red)"; finalLabel.style.color = "white"; finalLabel.style.padding = "2px 8px"; finalLabel.style.borderRadius = "4px"; finalLabel.style.fontSize = "0.75rem"; finalLabel.style.fontWeight = "bold"; finalLabel.style.letterSpacing = "1px"; nodeEl.appendChild(finalLabel);
             }
-
-            if (node.tier < gameState.currentTier) {
-                nodeEl.classList.add('completed');
-            } else if (node.tier === gameState.currentTier) {
-                if (gameState.currentTier === 0 || isChildOfCurrent(node.id)) {
-                    nodeEl.classList.add('active');
-                    nodeEl.addEventListener('click', () => openActionPanel(node));
-                } else {
-                    nodeEl.classList.add('locked');
-                }
-            } else {
-                nodeEl.classList.add('locked');
+            
+            if (gameState.visitedNodes && gameState.visitedNodes.includes(node.id)) { 
+                nodeEl.classList.add('completed'); 
+            } else if (node.tier < gameState.currentTier) { 
+                nodeEl.classList.add('locked'); 
+                nodeEl.style.opacity = '0.3';
+                nodeEl.style.filter = 'grayscale(100%)';
+            } else if (node.tier === gameState.currentTier) { 
+                if (gameState.currentTier === 0 || isChildOfCurrent(node.id)) { 
+                    nodeEl.classList.add('active'); 
+                    nodeEl.addEventListener('click', () => openActionPanel(node)); 
+                } else { 
+                    nodeEl.classList.add('locked'); 
+                } 
+            } else { 
+                nodeEl.classList.add('locked'); 
             }
             
             rowDiv.appendChild(nodeEl);
         });
-        
         DOM.nodesWrapper.appendChild(rowDiv);
     });
-
     setTimeout(drawLines, 50); 
 }
 
 function isChildOfCurrent(nodeId) {
     if (gameState.currentTier === 0) return true;
     const prevNode = findNode(gameState.currentNodeId);
-    if (prevNode && prevNode.tier === gameState.currentTier - 1) {
-        return prevNode.children.includes(nodeId);
-    }
+    if (prevNode && prevNode.tier === gameState.currentTier - 1) return prevNode.children.includes(nodeId);
     return true;
 }
 
 function drawLines() {
-    DOM.treeLines.innerHTML = '';
-    const svgRect = DOM.treeLines.getBoundingClientRect();
-    
+    DOM.treeLines.innerHTML = ''; const svgRect = DOM.treeLines.getBoundingClientRect();
     gameState.seasonTree.forEach(tier => {
         tier.forEach(node => {
-            const el1 = document.getElementById(node.id);
-            if (!el1) return;
-            const rect1 = el1.getBoundingClientRect();
-            
-            const x1 = rect1.left - svgRect.left + (rect1.width / 2);
-            const y1 = rect1.top - svgRect.top + (rect1.height / 2);
-
+            const el1 = document.getElementById(node.id); if (!el1) return; const rect1 = el1.getBoundingClientRect();
+            const x1 = rect1.left - svgRect.left + (rect1.width / 2); const y1 = rect1.top - svgRect.top + (rect1.height / 2);
             node.children.forEach(childId => {
-                const el2 = document.getElementById(childId);
-                if (!el2) return;
-                const rect2 = el2.getBoundingClientRect();
-                
-                const x2 = rect2.left - svgRect.left + (rect2.width / 2);
-                const y2 = rect2.top - svgRect.top + (rect2.height / 2);
-
+                const el2 = document.getElementById(childId); if (!el2) return; const rect2 = el2.getBoundingClientRect();
+                const x2 = rect2.left - svgRect.left + (rect2.width / 2); const y2 = rect2.top - svgRect.top + (rect2.height / 2);
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2);
-                line.classList.add('path-line');
-                if (node.tier < gameState.currentTier && isPathTaken(node.id, childId)) line.classList.add('active');
+                line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2); line.classList.add('path-line');
+                
+                if (gameState.visitedNodes && gameState.visitedNodes.includes(node.id) && gameState.visitedNodes.includes(childId)) {
+                    line.classList.add('active'); 
+                }
+                
                 DOM.treeLines.appendChild(line);
             });
         });
     });
 }
 
-function isPathTaken(parentId, childId) {
-    const childNode = findNode(childId);
-    return childNode && childNode.tier < gameState.currentTier; 
-}
-
-function findNode(id) {
-    for (let tier of gameState.seasonTree) {
-        for (let node of tier) { if (node.id === id) return node; }
-    }
-    return null;
-}
+function findNode(id) { for (let tier of gameState.seasonTree) { for (let node of tier) { if (node.id === id) return node; } } return null; }
 
 window.onload = init;
