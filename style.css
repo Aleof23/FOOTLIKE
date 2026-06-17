@@ -192,7 +192,7 @@ button:hover {
 .nodes-wrapper { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 3rem; width: 100%; }
 .tier-row { 
     position: relative; 
-    height: 48px; /* ANTES: 60px */
+    height: 55px; /* ANTES: 60px */
     width: 100%; 
 }
 
@@ -200,15 +200,20 @@ button:hover {
 .event-node { 
     position: absolute; 
     top: 0;             
-    margin-left: -25px; /* Mitad exacta de los nuevos 50px */
+    
+    /* 1. AUMENTA EL TAMAÑO AQUÍ */
+    width: 70px;        /* Antes estaba en 50px o 60px */
+    height: 70px;       /* Antes estaba en 50px o 60px */
+    font-size: 2rem;    /* Aumenta el emoji (antes 1.3rem o 1.6rem) */
+    
+    /* 2. AJUSTA EL CENTRADO (La mitad exacta de 70px es 35px) */
+    margin-left: -35px;
     
     background: rgba(10, 15, 30, 0.8); 
     border: 2px solid rgba(255,255,255,0.2); 
-    width: 50px; height: 50px; /* ANTES: 60px */
     border-radius: 50%; 
     display: flex; justify-content: center; align-items: center; 
     cursor: pointer; 
-    font-size: 1.3rem; /* ANTES: 1.6rem */
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     backdrop-filter: blur(5px);
 }
@@ -302,45 +307,161 @@ button:hover {
     .modal-content { padding: 2rem; width: 95%; }
 }
 
-/* --- BOTÓN DE TEMA Y CIERRE MÓVIL --- */
-.theme-btn {
-    background: transparent; border: 1px solid var(--glass-border); color: var(--text-light);
-    padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; margin-top: 10px; font-weight: bold;
-}
-.theme-btn:hover { background: rgba(255,255,255,0.1); }
 
 .close-mobile-btn {
     background: var(--danger-magenta); color: white; border: none; padding: 12px;
     border-radius: 8px; margin-bottom: 15px; font-weight: 900; text-transform: uppercase;
-    display: none; cursor: pointer; width: 100%; letter-spacing: 1px;
+    
+    /* ESTO ES LO QUE LO OCULTA EN PC */
+    display: none !important; 
+    
+    cursor: pointer; width: 100%; letter-spacing: 1px;
 }
+
 @media (max-width: 900px) {
-    .close-mobile-btn { display: block; }
+    .close-mobile-btn { 
+        /* ESTO ES LO QUE LO MUESTRA SOLO EN MÓVIL */
+        display: block !important; 
+    }
 }
 
-/* --- TEMA CLARO --- */
-body.light-theme {
-    --bg-gradient: linear-gradient(135deg, #e2e8f0 0%, #f8fafc 100%);
-    --panel-bg: rgba(255, 255, 255, 0.75);
-    --glass-border: rgba(0, 0, 0, 0.15);
-    --text-light: #0f172a;
-    --text-muted: #475569;
-    --action-cyan: #0284c7; /* Azul más oscuro para contrastar con blanco */
-    --action-cyan-glow: rgba(2, 132, 199, 0.3);
-    --gold-star: #d97706; 
+/* --- Styles for Transfer Offers Card Grid --- */
+
+/* The grid container within modalDynamic */
+#offers-grid {
+    display: flex;
+    flex-direction: column; /* Stack normal offers and stay choice */
+    gap: 1.5rem;
+    margin-top: 1rem;
+    width: 100%;
 }
 
-/* Ajustes de contraste para Modo Claro */
-body.light-theme .event-node { background: rgba(255, 255, 255, 0.9); border-color: rgba(0,0,0,0.2); color: #0f172a; }
-body.light-theme .event-node::after { background: rgba(255,255,255,0.95); color: #0f172a; border-color: rgba(0,0,0,0.2); }
-body.light-theme .path-line { stroke: rgba(0,0,0,0.15); }
-body.light-theme .game-log h3, body.light-theme .game-header h1, body.light-theme .player-name, body.light-theme .match-score, body.light-theme .retire-box span { text-shadow: none; color: #0f172a; }
-body.light-theme .log-entry, body.light-theme .stat-group, body.light-theme .history-card { background: rgba(255,255,255,0.6); color: #0f172a; }
-body.light-theme .stat-group span { color: #0f172a; }
-body.light-theme .profile-header { background: linear-gradient(180deg, rgba(2,132,199,0.1) 0%, rgba(255,255,255,0.6) 100%); }
-body.light-theme .modal-content { background: rgba(248, 250, 252, 0.95); box-shadow: 0 30px 60px rgba(0, 0, 0, 0.2); }
-body.light-theme .modal-overlay { background: rgba(255, 255, 255, 0.6); }
-body.light-theme .match-result { background: linear-gradient(90deg, rgba(255,255,255,0.8) 0%, rgba(226,232,240,0.9) 50%, rgba(255,255,255,0.8) 100%); }
-body.light-theme .retire-box, body.light-theme .retire-clubs { background: rgba(255,255,255,0.7); }
-body.light-theme .action-btn { color: #fff !important; }
-body.light-theme .live-event.goal { color: #0f172a; }
+/* Container for the grid of normal offers */
+.offers-list-container {
+    display: flex;
+    flex-wrap: wrap; /* Wrap to next row */
+    gap: 1.5rem;
+    justify-content: center; /* Center cards horizontally */
+    width: 100%;
+}
+
+/* Container for the single Stay card */
+.stay-club-container {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+/* Base style for each offer card */
+.offer-card {
+    background: rgba(0, 0, 0, 0.5); /* Semi-transparent dark background for cards */
+    border: 2px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    width: 260px; /* Fixed width for card consistency */
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transition: transform 0.3s ease, border-color 0.3s, box-shadow 0.3s;
+    cursor: pointer;
+    backdrop-filter: blur(5px);
+    position: relative; /* For special labels or overlays */
+}
+
+.offer-card:hover {
+    transform: translateY(-5px) scale(1.03); /* Slight hover effect */
+    border-color: var(--action-cyan); /* Neon cyan border on hover */
+    box-shadow: 0 10px 20px var(--action-cyan-glow);
+}
+
+/* Inner card element styles */
+.offer-card .card-title {
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.offer-card .card-crest.large {
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.offer-card .card-money-label {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.2rem;
+}
+
+.offer-card .card-money {
+    color: var(--success-green); /* Verde eléctrico for money values */
+    font-size: 2rem;
+    font-weight: 900;
+    text-shadow: 0 0 10px var(--success-green-glow);
+}
+
+/* Special card types and styling */
+
+/* Styling for normal offers */
+.offer-card:not(.stay):not(.fallback):not(.fired) {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Stay at Club Card */
+.offer-card.stay {
+    border-color: rgba(255,255,255,0.1);
+    box-shadow: none; /* No cyan glow */
+    padding-top: 1rem; /* Adjust padding for stay card */
+}
+
+.offer-card.stay:hover {
+    border-color: var(--text-light); /* Different hover border */
+    box-shadow: 0 10px 20px rgba(255, 255, 255, 0.15);
+}
+
+/* Fallback/Fired offers styling */
+.offer-card.fallback, .offer-card.fired {
+    border-color: var(--danger-magenta); /* Neon magenta/red border for special fallback */
+    box-shadow: 0 0 10px var(--danger-magenta-glow);
+}
+
+.offer-card.fallback:hover, .offer-card.fired:hover {
+    border-color: #fff; /* Neon magenta border changes to white on hover */
+    box-shadow: 0 10px 20px var(--danger-magenta-glow);
+}
+
+/* Optional label for fired cards */
+.offer-card.fired::before {
+    content: "FIN CONTRATO";
+    position: absolute;
+    top: -10px;
+    background: var(--danger-magenta);
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Adapt Responsive */
+@media (max-width: 900px) {
+    #offers-grid {
+         gap: 1rem;
+    }
+    .offers-list-container {
+         gap: 1rem;
+    }
+    .offer-card {
+        width: 100%;
+        max-width: 320px;
+    }
+}

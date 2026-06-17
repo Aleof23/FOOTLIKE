@@ -221,6 +221,7 @@ function init() {
 
     window.addEventListener('resize', drawLines);
     if (localStorage.getItem(SAVE_KEY)) DOM.btnContinue.classList.remove('hidden');
+    
 }
 
 function startNewCareer() {
@@ -552,12 +553,13 @@ function openActionPanel(node) {
     let myTeamInfo = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB.find(t => t.name === gameState.team) : null;
     let myTeamId = myTeamInfo ? myTeamInfo.id : "default";
 
+    // --- 1. EVENTO DE MERCADO DE FICHAJES (NUEVAS CARTAS) ---
     if (node.type === 'transfer') {
         let marketVal = getMarketValue();
         
         let offerCountRoll = Math.random() * 100;
         let numOffers = 0;
-        if (offerCountRoll < 5) numOffers = 0;       
+        if (offerCountRoll < 5) numOffers = 0;        
         else if (offerCountRoll < 30) numOffers = 1; 
         else if (offerCountRoll < 70) numOffers = 2; 
         else if (offerCountRoll < 95) numOffers = 3; 
@@ -584,30 +586,62 @@ function openActionPanel(node) {
             }
         }
 
-        openModal("Mercado de Fichajes", `Tu agente te trae ofertas basadas en tu rendimiento actual.<br><br><span style="color:var(--text-muted); font-size:0.95rem;">📊 Tu Valor de Mercado aprox: <strong>${formatMoney(marketVal)}</strong></span>${firedMsg}`);
+        DOM.modalOverlay.classList.remove('hidden'); 
+        DOM.modalTitle.textContent = "Mercado de Fichajes";
+        DOM.modalDesc.innerHTML = ""; 
+        DOM.modalChoices.innerHTML = ""; 
 
-        offerData.forEach(offer => {
-            let logoHtml = getShieldHtml(offer.id, "24px", true);
-            addChoice(`${logoHtml} Fichar por ${offer.name} (${formatMoney(offer.fee)})`, () => acceptOffer(offer));
-        });
+        // Inyectamos el texto descriptivo ARRIBA del todo
+        DOM.modalDynamic.innerHTML = `
+            <div style="width: 100%; margin-bottom: 2rem; text-align: center; font-size: 1.1rem; color: var(--text-light); line-height: 1.5;">
+                Tu agente te trae ofertas basadas en tu rendimiento actual.<br><br>
+                <span style="color:var(--text-muted); font-size:0.95rem;">📊 Tu Valor de Mercado aprox: <strong style="color:var(--action-cyan)">${formatMoney(marketVal)}</strong></span>
+                ${firedMsg}
+            </div>
+        `;
 
-        if (gameState.team !== "Agente Libre") {
-            if (!isFired) {
-                let myLogoHtml = getShieldHtml(myTeamId, "24px", true);
-                addChoice(`${myLogoHtml} Quedarme en el ${gameState.team}`, () => stayAtClub());
+        // Contenedor principal horizontal para las cartas
+        const offersList = document.createElement('div');
+        offersList.className = 'offers-list-container';
+        DOM.modalDynamic.appendChild(offersList);
+
+        function createOfferCard(offer, specialType = '') {
+            const card = document.createElement('div');
+            card.className = `offer-card ${specialType}`;
+            
+            const shieldHtml = getShieldHtml(offer.id, "60px", false); 
+            const moneyHtml = specialType === 'stay' ? '' : `<div class="card-money-label">Oferta:</div><div class="card-money">${formatMoney(offer.fee)}</div>`;
+            const titleHtml = specialType === 'stay' ? `<div class="card-title" style="color:var(--text-muted)">QUEDARME</div>` : `<div class="card-title">${offer.name}</div>`;
+            
+            card.innerHTML = `
+                ${titleHtml}
+                <div class="card-crest large">${shieldHtml}</div>
+                ${moneyHtml}
+            `;
+
+            if (specialType === 'stay') {
+                card.addEventListener('click', () => stayAtClub());
+            } else {
+                card.addEventListener('click', () => acceptOffer(offer));
             }
-        } 
-        
-        if (offerData.length === 0 && (gameState.team === "Agente Libre" || isFired)) {
-            let fallback = typeof TEAMS_DB !== 'undefined' ? TEAMS_DB[Math.floor(Math.random() * TEAMS_DB.length)] : { id: 'default', name: 'FC Equipo Local', league: 'Liga', fee: marketVal };
-            fallback.fee = marketVal * ((Math.random() * 0.4) + 0.8);
-            let fbLogo = getShieldHtml(fallback.id, "24px", true);
-            addChoice(`${fbLogo} Aceptar oferta de salvación del ${fallback.name} (${formatMoney(fallback.fee)})`, () => acceptOffer(fallback));
-        } else if (offerData.length === 0 && !isFired) {
-            let myLogoHtml = getShieldHtml(myTeamId, "24px", true);
-            addChoice(`${myLogoHtml} Nadie ha ofertado. Me quedo en el ${gameState.team}`, () => stayAtClub());
+
+            offersList.appendChild(card);
         }
 
+        if (gameState.team === "Agente Libre" || isFired) {
+             if (offerData.length === 0) {
+                let fallback = typeof TEAMS_DB !== 'undefined' ? { ...TEAMS_DB[Math.floor(Math.random() * TEAMS_DB.length)] } : { id: 'default', name: 'FC Equipo Local', league: 'Liga' };
+                fallback.fee = marketVal * ((Math.random() * 0.4) + 0.8);
+                createOfferCard(fallback, isFired ? 'fired' : 'fallback'); 
+             } else {
+                offerData.forEach(offer => createOfferCard(offer, isFired ? 'fired' : 'fallback'));
+             }
+        } else {
+            if (offerData.length > 0) offerData.forEach(offer => createOfferCard(offer, ''));
+            createOfferCard({ id: myTeamId, name: gameState.team, fee: 0 }, 'stay');
+        }
+
+    // --- 2. RESTO DE EVENTOS (PARTIDOS, ENTRENOS...) QUE SE HABÍAN BORRADO ---
     } else if (node.type === 'training') {
         openModal("Día de Entrenamiento", "Entrenamiento táctico y físico con el equipo.");
         addChoice("Machacarse en el gimnasio", () => resolveTraining());
@@ -1205,16 +1239,16 @@ function renderTree() {
             if (rowLen === 1) {
                 offsetX = 0;
             } else if (rowLen === 2) {
-                offsetX = index === 0 ? -6 : 6; 
+                offsetX = index === 0 ? -10 : 10; 
             } else if (rowLen === 3) {
-                if (index === 0) offsetX = -8.1;
+                if (index === 0) offsetX = -13.1;
                 else if (index === 1) offsetX = 0;
-                else offsetX = 8.1;
+                else offsetX = 13.1;
             } else if (rowLen === 4) {
-                if (index === 0) offsetX = -10.2;
-                else if (index === 1) offsetX = -2.8;
-                else if (index === 2) offsetX = 2.8;
-                else offsetX = 10.2;
+                if (index === 0) offsetX = -16.2;
+                else if (index === 1) offsetX = -5.8;
+                else if (index === 2) offsetX = 5.8;
+                else offsetX = 16.2;
             }
 
             // Aplicamos la posición física exacta en el CSS
